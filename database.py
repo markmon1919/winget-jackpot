@@ -1,7 +1,7 @@
 #!/usr/bin/env .venv/bin/python
 
 import os
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 from dataclasses import dataclass
 from config import GAME_CONFIGS
 from dotenv import load_dotenv
@@ -73,22 +73,48 @@ def init_providers():
     print(f"{colors.get('LCYN','')}✅ PROVIDER collection seeded successfully{colors.get('RES','')}")
 
 # -------------------------
+# AUTO INCREMENT FUNCTION
+# -------------------------
+# def get_next_sequence(name):
+#     counter = db["COUNTERS"].find_one_and_update(
+#         {"_id": name},
+#         {"$inc": {"seq": 1}},
+#         upsert=True,
+#         return_document=ReturnDocument.AFTER
+#     )
+#     return counter["seq"]
+
+# -------------------------
 # Seed GAME collection
 # -------------------------
 def init_games():
     games_col = db["GAME"]
-    games_col.create_index("name", unique=True)
+    # games_col.create_index("name", unique=True)
+    # games_col.create_index("_id", unique=True)
+
     for name, config in GAME_CONFIGS.items():
         doc = {
+            # "_id": get_next_sequence("game_id"),
             "name": name,
+            "id": int(config.id),
             "config": {k: v for k, v in config._asdict().items() if k != "provider"},
             "provider": config.provider
         }
-        games_col.update_one(
-            {"name": name},
-            {"$setOnInsert": doc},
-            upsert=True
-        )
+
+        # games_col.update_one(
+        #     {"name": name},
+        #     {"$setOnInsert": doc},
+        #     upsert=True
+        # )
+        
+        # games_col.update_one(
+        #     {"name": name},
+        #     {"$set": doc},
+        #     upsert=True
+        # )
+
+        games_col.insert_one(doc)
+
     print(f"{colors.get('LCYN','')}✅ GAME collection seeded successfully{colors.get('RES','')}")
 
 # -------------------------
@@ -97,6 +123,7 @@ def init_games():
 if __name__ == "__main__":
     try:
         client.admin.command("ping")
+        client.drop_database(DB_DATABASE) # reset datanase
         print(f"{colors.get('GRE','')}✅ MongoDB connection successful{colors.get('RES','')}")
         init_games()
         init_providers()

@@ -21,6 +21,7 @@ for key, value in os.environ.items():
 LOG_LEVEL = os.getenv("LOG_LEVEL")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 REQUEST_FROMS = [r.strip() for r in os.getenv("REQUEST_FROMS", "req1,req2").split(",")]
 
 
@@ -424,6 +425,7 @@ if __name__ == "__main__":
     r = redis.Redis(
         host=REDIS_HOST,
         port=REDIS_PORT,
+        password=REDIS_PASSWORD,
         decode_responses=True
     )
     

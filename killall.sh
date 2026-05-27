@@ -28,6 +28,7 @@ for pid in "${PIDS[@]}"; do
 done
 
 ps aux | grep data.py | grep -v grep | awk '{print $2}' | xargs kill
+ps aux | grep redis-server | grep -v grep | awk '{print $2}' | xargs kill
 
 
 # if [[ -z "$1" ]]; then

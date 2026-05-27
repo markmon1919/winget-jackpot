@@ -23,6 +23,7 @@ for key, value in os.environ.items():
 LOG_LEVEL = os.getenv("LOG_LEVEL")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 
 
 def setup_driver():
@@ -46,76 +47,95 @@ def setup_driver():
 # Fetch HTML via Selenium
 # -------------------------
 def fetch_html(driver: webdriver.Chrome, url: str):
-    driver.get(url)
+    try:
+        driver.get(url)
+        time.sleep(1)
+        
+        accept_btn = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable((By.CLASS_NAME, "van-button--primary"))
+        )
+        
+        accept_btn.click()
+    except Exception:
+        pass
+    except TimeoutException:
+        log_message(f"Timeout loading {url}")
+        driver.execute_script("window.stop();")
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:
+        log_message(f"Error loading {url}: {e}")
+        
     time.sleep(1)
-    
-    accept_btn = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.CLASS_NAME, "van-button--primary"))
-    )
-    
-    accept_btn.click()
-    
     return driver.page_source
 
 def fetch_winners_data(driver: webdriver.Chrome) -> list:
     while not stop_event.is_set():
         results = []
         seen = set()  # to avoid duplicates
-        
-        message_list = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "div.van-list"))
-        )
-        
-        cards = message_list.find_elements(By.CSS_SELECTOR, "div.feed_card")
-        
-        for card in cards:
-            try:
-                name_elem = card.find_elements(By.CSS_SELECTOR, "div.feed_top div.name")
-                time_elem = card.find_elements(By.CSS_SELECTOR, "div.feed_top div.time")
-                game_elem = card.find_elements(By.CSS_SELECTOR, "div.community_bet div.game_name")
-                bet_elem = card.find_elements(By.CSS_SELECTOR, "div.community_bet div.bet span")
 
-                if not (name_elem and time_elem and game_elem and bet_elem):
+        try:
+            message_list = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "div.van-list"))
+            )
+            
+            cards = message_list.find_elements(By.CSS_SELECTOR, "div.feed_card")
+
+            if not all([message_list, cards]): continue
+            
+            for card in cards:
+                try:
+                    name_elem = card.find_elements(By.CSS_SELECTOR, "div.feed_top div.name")
+                    time_elem = card.find_elements(By.CSS_SELECTOR, "div.feed_top div.time")
+                    game_elem = card.find_elements(By.CSS_SELECTOR, "div.community_bet div.game_name")
+                    bet_elem = card.find_elements(By.CSS_SELECTOR, "div.community_bet div.bet span")
+
+                    if not all([name_elem, time_elem, game_elem, bet_elem]): continue
+
+                    name = name_elem[0].text.strip()
+                    win_time = time_elem[0].text.strip()
+                    game_name = game_elem[0].text.strip()
+                    
+                    if "Super Ace 2" in game_name:
+                        game_name = game_elem[0].text.strip().replace("2", "II")
+                    
+                    bet = bet_elem[0].text.strip()
+                    multiplier = bet_elem[1].text.strip() if len(bet_elem) > 1 else ""
+
+                    # Skip empty entries
+                    if not all([name, win_time, game_name, bet, multiplier]): continue
+
+                    key = (name, win_time, game_name, bet, multiplier)
+                    if key not in seen:
+                        seen.add(key)
+                        results.append({
+                            "user": name,
+                            "time": win_time,
+                            "game": game_name,
+                            "bet": bet,
+                            "multiplier": multiplier
+                        })
+                except:
                     continue
 
-                name = name_elem[0].text.strip()
-                win_time = time_elem[0].text.strip()
-                game_name = game_elem[0].text.strip()
-                
-                if "Super Ace 2" in game_name:
-                    game_name = game_elem[0].text.strip().replace("2", "II")
-                
-                bet = bet_elem[0].text.strip()
-                multiplier = bet_elem[1].text.strip() if len(bet_elem) > 1 else ""
+                    # Scroll the message list to trigger rendering of more cards
+                    # driver.execute_script("arguments[0].scrollTop += 200", message_list)
+                    # time.sleep(0.5)  # small delay for JS to render
 
-                # Skip empty entries
-                if not (name and win_time and game_name and bet and multiplier):
-                    continue
+            if not results: continue
 
-                key = (name, win_time, game_name, bet, multiplier)
-                if key not in seen:
-                    seen.add(key)
-                    results.append({
-                        "user": name,
-                        "time": win_time,
-                        "game": game_name,
-                        "bet": bet,
-                        "multiplier": multiplier
-                    })
-            except:
-                continue
+            results = results[:12] # LIMIT TO 12 ITEMS
 
-                # Scroll the message list to trigger rendering of more cards
-                # driver.execute_script("arguments[0].scrollTop += 200", message_list)
-                # time.sleep(0.5)  # small delay for JS to render
-
-        # except TimeoutException:
-        #     log_message(f"Timeout: Message list did not load in {wait_time} seconds")
-        # except Exception as e:
-        #     log_message(f"Error fetching HTML: {e}")
-        r.set("winners_data", json.dumps(results))
-        # log_message("info", results)
-        return results
+            # except TimeoutException:
+            #     log_message(f"Timeout: Message list did not load in {wait_time} seconds")
+            # except Exception as e:
+            #     log_message(f"Error fetching HTML: {e}")
+            r.set("winners_data", json.dumps(results))
+            # log_message("info", results)
+            # return results
+            driver.refresh()
+        except Exception as e:
+            log_message("error", f"🤖❌  {e}")
 
 # def fetch_winners_data(driver: webdriver.Chrome, game: dict) -> list:
 #     while not stop_event.is_set():
@@ -174,6 +194,7 @@ if __name__ == "__main__":
     r = redis.Redis(
         host=REDIS_HOST,
         port=REDIS_PORT,
+        password=REDIS_PASSWORD,
         decode_responses=True
     )
     
@@ -186,15 +207,14 @@ if __name__ == "__main__":
         
     url = "https://www.gperya.com/community/new-winners/"
     
-    # while True:
-    #     try:
-    #         game = json.loads(r.get("game"))
-    #         provider = json.loads(r.get("provider"))
-    #         url = r.get("url")
-    #         if game and provider and url: break
-    #     except Exception as e:
-    #         log_message("error", f"Failed to read monitor data from Redis: {e}")
-    #         time.sleep(0.5)
+    while True:
+        try:
+            game = json.loads(r.get("game"))
+            provider = json.loads(r.get("provider"))
+            if game and provider: break
+        except Exception as e:
+            log_message("error", f"Failed to read monitor data from Redis: {e}")
+            time.sleep(0.5)
             
     stop_event = threading.Event()
     
@@ -203,6 +223,11 @@ if __name__ == "__main__":
     driver.implicitly_wait(2)
     
     fetch_html(driver, url)
+
+    fetch_thread = threading.Thread(target=fetch_winners_data, args=(driver,), daemon=True)
+    fetch_thread.start()
+
+    prev_game, prev_provider = game, provider
 
     
     # fetch_thread = threading.Thread(target=fetch_winners_data, args=(driver, game,), daemon=True)
@@ -216,8 +241,23 @@ if __name__ == "__main__":
     try: 
         while not stop_event.is_set():
             try:
-                fetch_winners_data(driver)
-                driver.refresh()
+                game = json.loads(r.get("game"))
+                provider = json.loads(r.get("provider"))
+                
+                if (game, provider) != (prev_game, prev_provider):
+                    print("🔔 Game/Provider changed!")
+                    stop_event.set()
+                    fetch_thread.join()
+                    stop_event.clear()
+                    fetch_html(driver, url)
+                    
+                    fetch_thread = threading.Thread(target=fetch_winners_data, args=(driver,), daemon=True)
+                    fetch_thread.start()
+
+                    prev_game, prev_provider = game, provider
+
+                # fetch_winners_data(driver)
+                # driver.refresh()
                 
                 # winners_data_raw = r.get("winners_data")
                 # if not winners_data_raw:
@@ -254,6 +294,7 @@ if __name__ == "__main__":
         #             prev_game, prev_provider, prev_url = game, provider, url
             except Exception as e:
                 log_message("error", f"Monitor loop error: {e}")
+
             stop_event.wait(0.5)
     except KeyboardInterrupt:
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
@@ -261,8 +302,8 @@ if __name__ == "__main__":
         log_message("warning", f"\n\n\t🤖❌  {colors.get('LYEL')}All threads shut down...{colors.get('RES')}")
         
         stop_event.set()
-        # if fetch_thread.is_alive():
-        #     fetch_thread.join(timeout=3)
+        if fetch_thread.is_alive():
+            fetch_thread.join(timeout=3)
         driver.quit()
         r.close()
         

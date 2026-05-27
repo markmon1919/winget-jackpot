@@ -15,6 +15,7 @@ load_dotenv()
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 API_PORT = int(os.getenv("API_PORT"))
 USER_AGENTS = [ua.strip() for ua in os.getenv("USER_AGENTS", "Poller/1.0").split(",")]
 REQUEST_FROMS = [r.strip() for r in os.getenv("REQUEST_FROMS", "req1,req2").split(",")]
@@ -26,6 +27,7 @@ logger = logging.getLogger("quic_redis_poller")
 r = redis.Redis(
     host=REDIS_HOST, 
     port=REDIS_PORT, 
+    password=REDIS_PASSWORD,
     decode_responses=True)
 
 try:
