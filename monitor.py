@@ -3049,7 +3049,7 @@ def fetch_api_data():
                 all([
                     new_signal is not None,
                     new_signal != last_signal,
-                     direction not in ["t r a p"],
+                    direction not in ["t r a p"],
                     round(avg_predicted_delta_sec) <= math.floor(predicted_delta_10m) or state.api_jackpot >= 99.66 and volatility_score > prev_volatility
                 ])
                 # all([api_vol < prev_api_vol, 
@@ -3218,6 +3218,7 @@ def fetch_api_data():
                             ) and all([
                                 random.random() < 0.1,
                                 predicted_delta_10m > prev_predicted_delta,
+                                direction not in ["t r a p"],
                                 abs(api_vol_delta) >= 100 or api_vol >= 200 or explosion or session_mode in ["HOT", "DRAIN"] or direction in ["reversal"]
                             ]):
                                 # if state.slow_mode:
