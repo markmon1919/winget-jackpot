@@ -394,7 +394,7 @@ GAME_CONFIGS = {
     "Sugar Bang Bang": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
     "Sugar Bang Bang 2": GameConfig(6686, "small", True, True, True, None, False, False, "FC"),
     "Sugar Bang Bang Plus": GameConfig(10966, "small", True, True, True, None, False, False, "FC"),
-    "Super Color Game": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
+    "Super Color Game": GameConfig(6677, "small", True, True, True, None, False, False, "FC"),
     "Super Elements": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
     "The The Golden Panther": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
     "Three Little Pigs": GameConfig(0, "small", True, True, True, None, False, False, "FC"),

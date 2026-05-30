@@ -145,7 +145,7 @@ class AutoState:
     api_vol: float = 0.0
     api_vol_signal: str = None
     api_vol_static: float = 0.0
-    rtp: bool = None
+    rtp: bool = True
     rtp_val: float = 0.0
     last_rtp: bool = None
 
@@ -3049,7 +3049,8 @@ def fetch_api_data():
                 all([
                     new_signal is not None,
                     new_signal != last_signal,
-                    direction not in ["t r a p"],
+                    # direction not in ["t r a p"],
+                    direction in ["reversal"],
                     round(avg_predicted_delta_sec) <= math.floor(predicted_delta_10m) or state.api_jackpot >= 99.66 and volatility_score > prev_volatility
                 ])
                 # all([api_vol < prev_api_vol, 
@@ -3176,18 +3177,18 @@ def fetch_api_data():
 
                 trigger = ((
                     state.rtp and any([
-                        session_mode == "HOT" and direction in ["bullish", "reversal"],
+                        session_mode in ["HOT", "DRAIN"] and direction in ["bullish", "reversal"],
                         # session_mode == "DRAIN" and any([drain_seconds <= 1, hot_seconds > 0.0]),
                         # session_mode not in ["HOT", "DRAIN"] and hot_seconds >= 0.0,
-                        drain_seconds <= 1 or 0.0 < hot_seconds <= 7,
+                        # drain_seconds <= 2 or 0.0 < hot_seconds <= 7,
                         state.api_jackpot >= 99.66 and volatility_score > prev_volatility and direction in ["bullish", "reversal"],
                         api_vol_delta >= 120,
                         api_vol >= 200 and direction in ["bullish", "reversal"]
                         # abs(api_vol_delta) >= 100 or api_vol >= 200 or explosion
                     ]))
                 or (not state.rtp and any([
-                        session_mode == "DRAIN" and direction in ["bearish", "reversal"],
-                        drain_seconds <= 1 or 0.0 < hot_seconds <= 7,
+                        session_mode in ["HOT", "DRAIN"] and direction in ["bearish", "reversal"],
+                        # drain_seconds <= 2 or 0.0 < hot_seconds <= 7,
                         state.api_jackpot >= 99.66 and volatility_score > prev_volatility,
                         api_vol_delta <= -120,
                         api_vol >= 200 and direction in ["bearish", "reversal"]
@@ -3219,7 +3220,7 @@ def fetch_api_data():
                                 random.random() < 0.1,
                                 predicted_delta_10m > prev_predicted_delta,
                                 direction not in ["t r a p"],
-                                abs(api_vol_delta) >= 100 or api_vol >= 200 or explosion or session_mode in ["HOT", "DRAIN"] or direction in ["reversal"]
+                                abs(api_vol_delta) >= 120 or api_vol >= 200 or explosion or session_mode in ["HOT", "DRAIN"] or direction in ["reversal"]
                             ]):
                                 # if state.slow_mode:
                                 #     if any([
