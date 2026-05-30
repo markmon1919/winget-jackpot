@@ -4410,7 +4410,7 @@ if __name__ == "__main__":
 
         # 3️⃣ Cleanup Redis
         try:
-            r.delete("game", "provider", "url", "api_server", "game_data", "api_data", "rtp_data", "winners_data")
+            r.delete("game", "provider", "url", "api_server", "game_data", "hs_data", "api_data", "rtp_data", "winners_data")
             r.close()
         except Exception:
             pass
