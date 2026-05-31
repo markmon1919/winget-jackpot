@@ -391,7 +391,7 @@ GAME_CONFIGS = {
     "Rich Man": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
     "Robin Hood": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
     "Roma Gladiatrix": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
-    "Sugar Bang Bang": GameConfig(0, "small", True, True, True, None, False, False, "FC"),
+    "Sugar Bang Bang": GameConfig(6667, "small", True, True, True, None, False, False, "FC"),
     "Sugar Bang Bang 2": GameConfig(6686, "small", True, True, True, None, False, False, "FC"),
     "Sugar Bang Bang Plus": GameConfig(10966, "small", True, True, True, None, False, False, "FC"),
     "Super Color Game": GameConfig(6677, "small", True, True, True, None, False, False, "FC"),
