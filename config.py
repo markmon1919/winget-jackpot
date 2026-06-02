@@ -323,7 +323,7 @@ GAME_CONFIGS = {
     "The Queen's Banquet": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Three Crazy Piggies": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Totem Wonders": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
-    "Treasures of Aztec": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
+    "Treasures of Aztec": GameConfig(9628, "small", False, True, True, None, False, False, "PG"),
     "Tree of Fortune": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Tsar Treasures": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Ultimate Striker": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
