@@ -3741,10 +3741,10 @@ def fetch_api_data():
 
 def get_game_name(game_id):
     if not game_id:
-        return "No ID"
+        return f"No ID: {game_id}"
 
     try:
-        game = db["GAME"].find_one({"id": int(game_id)})
+        game = db["GAME"].find_one({"config.id": int(game_id)})
     except:
         game = None
 

@@ -87,7 +87,8 @@ def get_game_id_from_icon(url: str):
         return None
 
     url = url.split("?")[0]
-    match = re.search(r"/(\d+)\.png", url)
+    match = re.search(r"/(\d+)\.(?:png|webp|jpg|jpeg)$", url)
+
     return int(match.group(1)) if match else None
 
 def parse_rtp(item):
@@ -125,6 +126,8 @@ def fetch_rtp_data(driver: webdriver.Chrome):
             img = top.find_element(By.CSS_SELECTOR, ".common_game_icon img")
             icon_url = img.get_attribute("data-src") or img.get_attribute("src") or ""
             game_id = get_game_id_from_icon(icon_url)
+            # log_message("info", f"ICON URL: {icon_url}")
+            # log_message("info", f"Top game ID: {game_id}")
             top_rtp, top_rtp_on = parse_rtp(top)
             top_total_bet = top.find_element(By.CSS_SELECTOR, ".total").text.strip()
 
@@ -191,7 +194,6 @@ def fetch_rtp_data(driver: webdriver.Chrome):
             #     # return data
 
             r.set("rtp_data", json.dumps(data))
-
             # return data
             driver.refresh()
         except Exception as e:
