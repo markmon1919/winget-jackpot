@@ -793,7 +793,7 @@ GAME_CONFIGS = {
     "Strawberry Cocktail": GameConfig(0, "small", False, True, True, True, True, True, "PP"),
     "Street Racer": GameConfig(0, "small", False, True, True, True, True, True, "PP"),
     "Striking Hot 5": GameConfig(0, "small", False, True, True, True, True, True, "PP"),
-    "Sugar Rush": GameConfig(0, "small", False, True, True, True, True, True, "PP"),
+    "Sugar Rush": GameConfig(9483, "small", False, True, True, True, True, True, "PP"),
     "Sugar Rush 1000": GameConfig(0, "small", False, True, True, True, True, True, "PP"),
     "Sugar Rush™": GameConfig(0, "small", False, True, True, True, True, True, "PP"),
     "Sumo Supreme Megaways": GameConfig(0, "small", False, True, True, True, True, True, "PP"),
