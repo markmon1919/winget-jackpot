@@ -26,6 +26,7 @@ REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 
 def setup_driver():
     options = Options()
+
     if platform.system() != "Darwin" or os.getenv("IS_DOCKER") == "1":
         options.binary_location = "/opt/google/chrome/chrome"
         options.add_argument('--disable-dev-shm-usage')
@@ -72,12 +73,12 @@ def fetch_html(driver: webdriver.Chrome, url: str, game: dict, provider: dict):
     except Exception:
         pass
     except TimeoutException:
-        log_message(f"Timeout loading {url}")
+        log_message("info", f"Timeout loading {url}")
         driver.execute_script("window.stop();")
     except KeyboardInterrupt:
-        raise
+        log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     except Exception as e:
-        log_message(f"Error loading {url}: {e}")
+        log_message("error", f"Error loading {url}: {e}")
         
     time.sleep(1)
     return driver.page_source
@@ -144,6 +145,7 @@ if __name__ == "__main__":
         log_message("info", f"✅ Connected to Redis")
     except redis.exceptions.ConnectionError as e:
         log_message("error", f"🤖❌ Redis connection failed  {e}")
+        raise SystemExit(1)
         
     while True:
         try:
@@ -176,7 +178,7 @@ if __name__ == "__main__":
                 url = r.get("url")
                 
                 if (game, provider, url) != (prev_game, prev_provider, prev_url):
-                    print("🔔 Game/Provider/URL changed!")
+                    log_message("info", "🔔 Game/Provider/URL changed!")
                     # Stop old threads
                     stop_event.set()
                     fetch_thread.join()
@@ -192,16 +194,23 @@ if __name__ == "__main__":
                     prev_game, prev_provider, prev_url = game, provider, url
             except Exception as e:
                 log_message("error", f"Monitor loop error: {e}")
-                
-            stop_event.wait(0.5)
+            finally:
+                stop_event.wait(0.5)
     except KeyboardInterrupt:
+        stop_event.set()
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     finally:                        
         log_message("warning", f"\n\n\t🤖❌  {colors.get('LYEL')}All threads shut down...{colors.get('RES')}")
         
         stop_event.set()
-        if fetch_thread.is_alive():
-            fetch_thread.join(timeout=3)
+
+        if fetch_thread.is_alive(): fetch_thread.join(timeout=3)
+
         driver.quit()
-        r.close()
+
+        try:
+            r.delete("game_data")
+            r.close()
+        except Exception:
+            pass
         

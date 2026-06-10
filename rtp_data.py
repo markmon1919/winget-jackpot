@@ -56,11 +56,11 @@ def setup_driver():
 # -------------------------
 # FETCH HTML
 # -------------------------
-def fetch_html(driver, url: str):
+def fetch_html(driver: webdriver.Chrome, url: str):
     try:
         driver.get(url)
         time.sleep(1)
-
+        
         btn = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.CLASS_NAME, "van-button--primary"))
         )
@@ -69,12 +69,12 @@ def fetch_html(driver, url: str):
     except Exception:
         pass
     except TimeoutException:
-        log_message(f"Timeout loading {url}")
+        log_message("info", f"Timeout loading {url}")
         driver.execute_script("window.stop();")
     except KeyboardInterrupt:
-        raise
+        log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     except Exception as e:
-        log_message(f"Error loading {url}: {e}")
+        log_message("error", f"Error loading {url}: {e}")
         
     time.sleep(1)
     return driver.page_source
@@ -106,7 +106,7 @@ def parse_rtp(item):
 # -------------------------
 # MAIN SCRAPER
 # -------------------------
-def fetch_rtp_data(driver: webdriver.Chrome):
+def fetch_rtp_data(driver: webdriver.Chrome) -> dict:
     while not stop_event.is_set():
         data = {}
         lists = []
@@ -164,7 +164,6 @@ def fetch_rtp_data(driver: webdriver.Chrome):
                                 "rtp": rtp,
                                 "up": rtp_on
                             })
-
                         except:
                             continue
 
@@ -176,11 +175,9 @@ def fetch_rtp_data(driver: webdriver.Chrome):
                 except:
                     continue
 
-            data["lists"] = lists
-
-            # r.set("rtp_data", json.dumps(data))
-
             if not lists: continue
+
+            data["lists"] = lists
 
             # if lists:
             #     # r.set("rtp_data", json.dumps(data))
@@ -195,9 +192,10 @@ def fetch_rtp_data(driver: webdriver.Chrome):
 
             r.set("rtp_data", json.dumps(data))
             # return data
-            driver.refresh()
         except Exception as e:
             log_message("error", f"🤖❌  {e}")
+        # finally:
+        #     driver.refresh()
 
         # except Exception as e:
         #     log_message("error", f"RTP error: {e}")
@@ -221,6 +219,7 @@ if __name__ == "__main__":
         log_message("info", "✅ Connected to Redis")
     except Exception as e:
         log_message("error", f"🤖❌ Redis connection failed  {e}")
+        raise SystemExit(1)
 
     url = "https://www.gperya.com/community/realtime-rtp/"
 
@@ -253,7 +252,7 @@ if __name__ == "__main__":
                 provider = json.loads(r.get("provider"))
 
                 if (game, provider) != (prev_game, prev_provider):
-                    print("🔔 Game/Provider changed!")
+                    log_message("info", "🔔 Game/Provider changed!")
                     stop_event.set()
                     fetch_thread.join()
                     stop_event.clear()
@@ -269,15 +268,22 @@ if __name__ == "__main__":
                 # stop_event.wait(0.5)
             except Exception as e:
                 log_message("error", f"Monitor loop error: {e}")
-
-            stop_event.wait(0.5)
+            finally:
+                stop_event.wait(0.5)
     except KeyboardInterrupt:
+        stop_event.set()
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
-    finally:                        
+    finally:                      
         log_message("warning", f"\n\n\t🤖❌  {colors.get('LYEL')}All threads shut down...{colors.get('RES')}")
         
         stop_event.set()
-        if fetch_thread.is_alive():
-            fetch_thread.join(timeout=3)
+
+        if fetch_thread.is_alive(): fetch_thread.join(timeout=3)
+
         driver.quit()
-        r.close()
+
+        try:
+            r.delete("rtp_data")
+            r.close()
+        except Exception:
+            pass

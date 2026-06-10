@@ -9,9 +9,9 @@ from decimal import Decimal
 from queue import Queue as ThQueue, Empty
 from pynput.keyboard import Listener as KeyboardListener, Key, KeyCode
 # from trend import load_trend_memory
-from config import (HOLD_DELAY_RANGE, SPIN_DELAY_RANGE, TIMEOUT_DELAY_RANGE, EXECUTION_TIME_RANGE)
+# from config import (HOLD_DELAY_RANGE, SPIN_DELAY_RANGE, TIMEOUT_DELAY_RANGE, EXECUTION_TIME_RANGE)
 
-from config import (DEFAULT_GAME_CONFIG, SCREEN_POS, LEFT_SLOT_POS, RIGHT_SLOT_POS)
+from config import (DEFAULT_GAME_CONFIG, SCREEN_POS, LEFT_SLOT_POS, RIGHT_SLOT_POS, HOLD_DELAY_RANGE, SPIN_DELAY_RANGE, TIMEOUT_DELAY_RANGE, EXECUTION_TIME_RANGE)
 from database import db
 from dotenv import load_dotenv
 
@@ -63,13 +63,13 @@ class AutoState:
     right_slot: bool = False
     # forever_spin: bool = False
     
-    # hotkeys: bool = True
-    # running: bool = True
-    # pressing: bool = False
+    hotkeys: bool = False
+    running: bool = True
+    pressing: bool = False
     # clicking: bool = False
-    # current_key: str = None
-    # move: bool = False
-    # auto_play: bool = False
+    current_key: str = None
+    move: bool = False
+    auto_play: bool = False
 
     breakout: dict = field(default_factory=dict)
     neutralize: bool = False
@@ -2702,7 +2702,7 @@ def fetch_api_data():
     while not stop_event.is_set():
         try:
             BLINK = colors['BLNK'] if timer().second % 10 in (8, 9) else ''
-            redis_key = f"api_data:{game['name']}:{provider['initial']}"
+            # redis_key = f"api_data:{game['name']}:{provider['initial']}"
             api_data_raw = r.get(redis_key)
             if not api_data_raw:
                 time.sleep(0.5)
@@ -3885,7 +3885,7 @@ def fetch_rtp_data():
                         ...
                     except Exception as e:
                         log_message("error", f"format_game crash gid={g.get('game_id')} {e}")
-                        raise
+                        # raise
 
                     rtp_val = str_to_float(g.get("rtp", "").replace("RTP:", "").replace("%", ""))
                     section_history = rtp_history.setdefault(title, {})
@@ -3962,7 +3962,7 @@ def fetch_rtp_data():
 
                 # 🔥 HOT section = 2 columns
                 # helper: strip ANSI for accurate width
-                ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+                # ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
 
                 # def visible_len(s):
                 #     return len(ansi_escape.sub('', s))
@@ -4125,13 +4125,15 @@ def pct(p):
         return 0.0
     
 def start_listeners(stop_event):
-    with KeyboardListener(on_press=on_key_press) as kb_listener:
+    # with KeyboardListener(on_press=on_key_press) as kb_listener:
+    with KeyboardListener(on_press=on_key_press, on_release=on_key_release) as kb_listener:
         while not stop_event.is_set():
             kb_listener.join(0.1)
+            # mouse_listener.join(0.1)
 
 def on_key_press(key):
     if key == Key.esc:
-        # state.running = False
+        state.running = False
         os._exit(0)
         
     if key == Key.right:
@@ -4148,13 +4150,31 @@ def on_key_press(key):
         ]
         random.choice(bet_dec)()
         
+    # if key == Key.up:
+    #     state.extra_bet = not state.extra_bet
+    #     threading.Thread(target=bet_switch, args=(False, state.extra_bet,), daemon=True).start()
+    #     # status = "ON" if state.extra_bet else "OFF"
+    #     # alert_queue.put(f"extra bet {status}")
+
+    if key == Key.shift_r:
+        state.hotkeys = not state.hotkeys
+        threading.Thread(target=keyboard, args=(settings,), daemon=True).start()
+        status = "ON" if state.hotkeys else "OFF"
+        alert_queue.put(f"hotkeys {status}")
+
     if key == Key.up:
-        state.extra_bet = not state.extra_bet
-        threading.Thread(target=bet_switch, args=(False, state.extra_bet,), daemon=True).start()
-        # status = "ON" if state.extra_bet else "OFF"
-        # alert_queue.put(f"extra bet {status}")
+        print("Turbo: ON")
+        # play_alert(say="turbo mode ON")
+        pyautogui.PAUSE = 0
+        pyautogui.FAILSAFE = False
+
+    elif key == Key.down:
+        print("Normal Speed: ON")
+        # play_alert(say="normal speed ON")
+        pyautogui.PAUSE = 0.1
+        pyautogui.FAILSAFE = True
         
-    if key == Key.shift:
+    if key == Key.shift_l:
         state.auto_mode = not state.auto_mode
         spin_in_progress.clear()
         status = "ENABLED" if state.auto_mode else "DISABLED"
@@ -4240,6 +4260,184 @@ def on_key_press(key):
         spin_in_progress.clear()
         threading.Thread(target=spin, args=(False, False, False, False, False, True,), daemon=False).start()
         alert_queue.put(f"quick spin")
+
+    # MANUAL
+    if isinstance(key, KeyCode):
+        if key.char in [ 'q', 'w', 'e', 'a', 's', 'd' ]:
+            state.pressing = True
+            state.current_key = key.char
+            state.move = True if key.char not in [ 'a', 's', 'd' ] and state.turbo else False
+            if not state.auto_play_menu:
+                num_clicks = { 'q': 20, 'w': 50, 'e': 100, 'a': 200, 's': 300, 'd': 400 }[ key.char ]
+                state.auto_play = False
+            else:
+                num_clicks = { 'q': 1, 'w': 1, 'e': 1, 'a': 200, 's': 300, 'd': 400 }[ key.char ]
+                state.auto_play = False if key.char in [ 'a', 's', 'd' ] and state.turbo else state.auto_play
+        else:
+            state.pressing = True
+            state.current_key = key.char
+            num_clicks = 1
+            if key.char == 'r':
+                state.move = True
+                state.auto_play = False
+            elif key.char == 'v' and state.auto_spin:
+                state.move = True
+                state.auto_play = False
+            # elif key.char in [ '1', '2', '3' ] and turbo is True:
+            #     move = True
+            elif key.char == 'f' and state.feature:
+                state.move = True
+                state.auto_play = False
+            else:
+                state.auto_play = False
+    # elif key in [ Key.tab, Key.shift ]:
+    #     state.pressing = True
+    #     state.current_key = 'tab' if key == Key.tab else 'shift'
+    #     num_clicks = 1
+    #     state.move = True
+    #     state.auto_play = False
+    else:
+        return
+
+    print(f"\nPressed [{ state.current_key }] ---> { num_clicks } {'click' if num_clicks == 1 else 'clicks'}")
+
+def on_key_release(key):
+    # if key == Key.space:
+    #     if state.spin:
+    #         state.pressing = False
+    #         state.current_key = 'space'
+    #         num_clicks = 1
+    #         state.move = False
+    #     else:
+    #         state.auto_play = False
+
+    if isinstance(key, KeyCode):
+        state.pressing = False
+        state.current_key = key.char
+        if key.char in [ 'q', 'w', 'e' ] and state.turbo and state.auto_play_menu:
+            state.move = False
+        elif key.char == 'r':
+            state.move = False
+            state.auto_play = False
+        elif key.char == 'v' and state.auto_spin:
+            state.move = False
+            state.auto_play = False
+        # elif key.char in [ '1', '2', '3' ] and turbo is True:
+        #     move = False
+        elif key.char == 'f' and state.feature:
+            state.move = False
+            state.auto_play = False
+        else:
+            state.auto_play = False
+    elif key in [ Key.tab, Key.shift ]:
+        state.pressing = False
+        state.current_key = 'tab' if key == Key.tab else 'shift'
+        state.move = False
+        state.auto_play = False
+    else:
+        return
+
+    print(f"\nReleased ---> [{ state.current_key }]")
+
+# def set_location(key):
+#     x1, x2 = 0, 0
+#     y1, y2 = 0, 0
+
+#     random_x = center_x + random.randint(x1, x2)
+#     random_y = center_y + random.randint(y1, y2)
+
+#     if key in [ 'r', 'u', 'i', 'o', 'p', 'j', 'k', 'l' 'm', ',', '.', '/' ]: # SLOT SCREEN
+#         if state.game == "Fortune Goddess":
+#             if key == 'r':
+#                 pyautogui.doubleClick(x=random_x, y=random_y)
+#         elif state.game == "Lucky Fortunes":
+#             if key == 'r':
+#                 pyautogui.doubleClick(x=random_x, y=random_y)
+#             elif key in [ 'u', 'i', 'o', 'p', 'j', 'k', 'l' 'm', ',', '.', '/' ]:
+#                 pyautogui.click(x=random_x, y=random_y)
+#         elif state.auto_play_menu:
+#             if key == 'r':
+#                 pyautogui.moveTo(x=random_x, y=random_y)
+#         else:
+#             return
+#     elif key == 'f' and state.feature: # FEATURE
+#         if state.game == "Fortune Goddess":
+#             pyautogui.click(x=random_x, y=random_y + 200)
+#             pyautogui.doubleClick(x=random_x, y=random_y + 315)
+#         elif state.game == "Lucky Fortunes":
+#             pyautogui.click(x=random_x, y=random_y + 200)
+#             pyautogui.doubleClick(x=random_x, y=random_y + 380)
+#         elif state.auto_play_menu:
+#             pyautogui.doubleClick(x=random_x - 600, y=random_y - 70)
+#     elif key == 'v' and state.auto_spin: # AUTO SPIN
+#         if state.game == "Fortune Goddess":
+#             pyautogui.click(x=random_x - 150, y=random_y + 290)
+#             pyautogui.doubleClick(x=random_x, y=random_y + 315)
+#         elif state.game == "Lucky Fortunes":
+#             pyautogui.click(x=random_x - 150, y=random_y + 365)
+#             pyautogui.doubleClick(x=random_x, y=random_y + 380)
+#         elif state.auto_play_menu:
+#             pyautogui.click(x=random_x + 445, y=random_y + 455)
+#             pyautogui.click(x=random_x, y=random_y + 180)
+#     elif key == 'space' and state.spin: # SPIN BUTTON
+#         if state.game == "Fortune Goddess":
+#             pyautogui.moveTo(x=random_x, y=random_y + 315)
+#         elif state.game == "Lucky Fortunes":
+#             pyautogui.moveTo(x=random_x, y=random_y + 380)
+#     elif key in [ 'tab', 'shift', 'q', 'w', 'e', 'a' ] and state.turbo: # TURBO BUTTON
+#         if state.game == "Fortune Goddess":
+#             if key == 'tab':
+#                 pyautogui.doubleClick(x=random_x - 210, y=random_y + 350)
+#             elif key == 'shift':
+#                 pyautogui.click(x=random_x - 210, y=random_y + 350)
+#             else:
+#                 pyautogui.click(x=random_x - 210, y=random_y + 350)
+#         elif state.game == "Lucky Fortunes":
+#             if key == 'tab':
+#                 pyautogui.doubleClick(x=random_x - 210, y=random_y + 415)
+#             elif key == 'shift':
+#                 pyautogui.click(x=random_x - 210, y=random_y + 415)
+#             else:
+#                 pyautogui.click(x=random_x - 210, y=random_y + 415)
+#         elif state.auto_play_menu:
+#             if not state.auto_play:
+#                 pyautogui.click(x=random_x + 445, y=random_y + 455)
+#                 state.auto_play = True
+
+#             if key == 'q':
+#                 pyautogui.click(x=random_x - 250, y=random_y - 120)
+#             elif key == 'w':
+#                 pyautogui.click(x=random_x - 60, y=random_y - 120)
+#             elif key == 'e':
+#                 pyautogui.click(x=random_x + 150, y=random_y - 120)
+
+#             pyautogui.moveTo(x=random_x, y=random_y + 180)
+
+def keyboard(settings):
+    while state.running:
+        if state.hotkeys and state.pressing and state.current_key: #in settings.sleep_times:
+            if state.current_key == 'd':
+                pyautogui.doubleClick()
+            else:
+                if not state.move:
+                    pyautogui.click()
+                # else:
+                #     set_location(state.current_key)
+
+            time.sleep(settings.sleep_times.get(state.current_key, 0.001))
+        else:
+            time.sleep(0.001)
+
+# def mouse():
+#     while state.running:
+#         if state.clicking and state.auto_play:
+#             print("[ MOUSE ] Mouse clicked")
+#             state.auto_play = False
+#         time.sleep(0.02)
+
+# def on_click(x, y, button, pressed):
+#     if button == Button.left:
+#         state.clicking = pressed
         
 
 if __name__ == "__main__":
@@ -4252,9 +4450,10 @@ if __name__ == "__main__":
 
     try:
         r.ping()
-        print("✅ Connected to Redis")
+        log_message("info", f"✅ Connected to Redis")
     except redis.exceptions.ConnectionError as e:
-        print("❌ Redis connection failed:", e)
+        log_message("error", f"🤖❌ Redis connection failed  {e}")
+        raise SystemExit(1)
     
     stop_event = threading.Event()
     spin_in_progress = threading.Event()
@@ -4301,6 +4500,7 @@ if __name__ == "__main__":
     API_SERVERS = {url: url for url in SERVERS_LIST}
     api_server = next((url for url in API_SERVERS if 'localhost' in url), None) # local
     # # api_server = f"wss://{VPS_DOMAIN}/ws" # vps
+    redis_key = f"api_data:{game['name']}:{provider['initial']}"
     
     r.set("game", json.dumps(game))
     r.set("provider", json.dumps(provider))
@@ -4383,7 +4583,8 @@ if __name__ == "__main__":
                         threading.Thread(target=spin, args=(False, True, False, False,), daemon=False).start()
                     next_run = now + random.uniform(5, 9)
                     # alert_queue.put("ping")
-            time.sleep(0.5)
+            # time.sleep(0.5)
+            stop_event.wait(0.5)
     except KeyboardInterrupt:
         stop_event.set()
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
@@ -4402,15 +4603,15 @@ if __name__ == "__main__":
 
         # 2️⃣ Join NON-daemon workers only
         for t in (alert_thread, timer_thread, log_thread):
-            t.join(timeout=2)
+            t.join(timeout=3)
 
         for t in threads:
-            if not t.daemon:
-                t.join(timeout=2)
+            if t.is_alive(): t.join(timeout=3)
 
         # 3️⃣ Cleanup Redis
         try:
-            r.delete("game", "provider", "url", "api_server", "game_data", "hs_data", "api_data", "rtp_data", "winners_data")
+            r.delete("game", "provider", "url", "game_data", redis_key)
+            # r.delete("game", "provider", "url", "api_server", "game_data", "hs_data", "api_data", "rtp_data", "winners_data")
             r.close()
         except Exception:
             pass

@@ -35,7 +35,7 @@ try:
     logger.info("✅ Connected to Redis")
 except redis.exceptions.ConnectionError as e:
     logger.error("❌ Redis connection failed: %s", e)
-    exit(1)
+    raise SystemExit(1)
 
 # ────────────── In-memory stores ──────────────
 last_min10s = {}             # requestFrom -> float
@@ -172,12 +172,19 @@ async def quic_server():
         configuration=config,
         create_protocol=WebTransportProtocol
     )
+
     logger.info("🔐 QUIC/WebTransport server running on UDP :%s", API_PORT)
+    
     try:
         await asyncio.Future()  # run forever
     finally:
         server.close()
         await server.wait_closed()
+        
+        try:
+            r.close()
+        except Exception:
+            pass
 
 # ────────────── Entrypoint ──────────────
 async def main():

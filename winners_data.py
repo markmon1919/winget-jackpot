@@ -59,12 +59,12 @@ def fetch_html(driver: webdriver.Chrome, url: str):
     except Exception:
         pass
     except TimeoutException:
-        log_message(f"Timeout loading {url}")
+        log_message("info", f"Timeout loading {url}")
         driver.execute_script("window.stop();")
     except KeyboardInterrupt:
-        raise
+        log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     except Exception as e:
-        log_message(f"Error loading {url}: {e}")
+        log_message("error", f"Error loading {url}: {e}")
         
     time.sleep(1)
     return driver.page_source
@@ -133,9 +133,10 @@ def fetch_winners_data(driver: webdriver.Chrome) -> list:
             r.set("winners_data", json.dumps(results))
             # log_message("info", results)
             # return results
-            driver.refresh()
         except Exception as e:
             log_message("error", f"🤖❌  {e}")
+        # finally:
+        #     driver.refresh()
 
 # def fetch_winners_data(driver: webdriver.Chrome, game: dict) -> list:
 #     while not stop_event.is_set():
@@ -203,7 +204,7 @@ if __name__ == "__main__":
         log_message("info", f"✅ Connected to Redis")
     except redis.exceptions.ConnectionError as e:
         log_message("error", f"🤖❌ Redis connection failed  {e}")
-        
+        raise SystemExit(1)
         
     url = "https://www.gperya.com/community/new-winners/"
     
@@ -238,7 +239,7 @@ if __name__ == "__main__":
     # fetch_thread = threading.Thread(target=fetch_winners_data, args=(driver,), daemon=True)
     # fetch_thread.start()
 
-    try: 
+    try:
         while not stop_event.is_set():
             try:
                 game = json.loads(r.get("game"))
@@ -293,17 +294,23 @@ if __name__ == "__main__":
                         
         #             prev_game, prev_provider, prev_url = game, provider, url
             except Exception as e:
-                log_message("error", f"Monitor loop error: {e}")
-
-            stop_event.wait(0.5)
+                log_message("error", f"🤖❌  {e}")
+            finally:
+                stop_event.wait(0.5)
     except KeyboardInterrupt:
+        stop_event.set()
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     finally:                        
         log_message("warning", f"\n\n\t🤖❌  {colors.get('LYEL')}All threads shut down...{colors.get('RES')}")
         
         stop_event.set()
-        if fetch_thread.is_alive():
-            fetch_thread.join(timeout=3)
-        driver.quit()
-        r.close()
+
+        if fetch_thread.is_alive(): fetch_thread.join(timeout=3)
         
+        driver.quit()
+
+        try:
+            r.delete("winners_data")
+            r.close()
+        except Exception:
+            pass
