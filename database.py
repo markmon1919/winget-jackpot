@@ -96,7 +96,7 @@ def init_games():
         doc = {
             # "_id": get_next_sequence("game_id"),
             "name": name,
-            # "id": int(config.id),
+            "id": config.id,
             "config": {k: v for k, v in config._asdict().items() if k != "provider"},
             "provider": config.provider
         }

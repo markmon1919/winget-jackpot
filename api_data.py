@@ -19,6 +19,12 @@ REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 API_PORT = int(os.getenv("API_PORT"))
 USER_AGENTS = [ua.strip() for ua in os.getenv("USER_AGENTS", "Poller/1.0").split(",")]
 REQUEST_FROMS = [r.strip() for r in os.getenv("REQUEST_FROMS", "req1,req2").split(",")]
+URLS_LIST = [url.strip() for url in os.getenv("URLS").split(",") if os.getenv("URLS").strip()]
+URLS = {url: url for url in URLS_LIST}
+URL_BASE = next((url for url in URLS if 'win' in url), None)    
+ENDPOINTS_LIST = [ep.strip() for ep in os.getenv("ENDPOINTS").split(",") if os.getenv("ENDPOINTS").strip()]
+ENDPOINTS = {ep: ep for ep in ENDPOINTS_LIST}
+ENDPOINT = next((ep for ep in ENDPOINTS if '/api' in ep), None)    
 
 logging.basicConfig(level=(logging.DEBUG if LOG_LEVEL == "DEBUG" else logging.INFO))
 logger = logging.getLogger("quic_redis_poller")
@@ -57,12 +63,11 @@ async def broadcast(data):
 
 # ────────────── Poller ──────────────
 async def poll_single(client, game_name, provider, requestFrom):
-    url_base = r.get("url")
-    if not url_base:
+    if not URL_BASE:
         logger.warning("❌ No API URL set in Redis. Skipping poll.")
         return
 
-    url = f"{url_base}/api/games"
+    url = f"{URL_BASE}{ENDPOINT}"
     headers = {"Accept": "application/json", "User-Agent": random.choice(USER_AGENTS)}
     params = {"name": game_name, "manuf": provider, "requestFrom": requestFrom}
 

@@ -3,7 +3,7 @@
 
 import json, os, platform, redis, shutil, time, threading
 from monitor import log_message
-from decimal import Decimal
+# from decimal import Decimal
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -22,7 +22,9 @@ LOG_LEVEL = os.getenv("LOG_LEVEL")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
-
+URLS_LIST = [url.strip() for url in os.getenv("URLS").split(",") if os.getenv("URLS").strip()]
+URLS = {url: url for url in URLS_LIST}
+URL_BASE = next((url for url in URLS if 'win' in url), None)    
 
 def setup_driver():
     options = Options()
@@ -35,19 +37,24 @@ def setup_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-gpu")
     options.add_argument("--blink-settings=imagesEnabled=false")
+    options.add_argument("--disable-background-timer-throttling")
+    options.add_argument("--disable-backgrounding-occluded-windows")
+    options.add_argument("--disable-renderer-backgrounding")
     options.add_argument("--disable-logging")
     options.add_argument("--log-level=3")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("useAutomationExtension", False)
 
     service = Service(shutil.which("chromedriver"))
-    
+
     return webdriver.Chrome(service=service, options=options)
 
 # -------------------------
 # Fetch HTML via Selenium
 # -------------------------
-def fetch_html(driver: webdriver.Chrome, url: str, game: dict, provider: dict):    
+def fetch_html(driver: webdriver.Chrome, game: dict, provider: dict):    
     try:
-        driver.get(url)
+        driver.get(URL_BASE)
         time.sleep(1)
         search_box = driver.find_element(By.ID, "van-search-1-input")
         # driver.execute_script("arguments[0].value = '';", search_box) # use only if loop multiple games
@@ -73,12 +80,12 @@ def fetch_html(driver: webdriver.Chrome, url: str, game: dict, provider: dict):
     except Exception:
         pass
     except TimeoutException:
-        log_message("info", f"Timeout loading {url}")
+        log_message("info", f"Timeout loading {URL_BASE}")
         driver.execute_script("window.stop();")
     except KeyboardInterrupt:
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     except Exception as e:
-        log_message("error", f"Error loading {url}: {e}")
+        log_message("error", f"Error loading {URL_BASE}: {e}")
         
     time.sleep(1)
     return driver.page_source
@@ -151,8 +158,8 @@ if __name__ == "__main__":
         try:
             game = json.loads(r.get("game"))
             provider = json.loads(r.get("provider"))
-            url = r.get("url")
-            if game and provider and url: break
+
+            if game and provider: break
         except Exception as e:
             log_message("error", f"Failed to read monitor data from Redis: {e}")
             time.sleep(0.5)
@@ -163,22 +170,21 @@ if __name__ == "__main__":
     driver.set_page_load_timeout(30)
     driver.implicitly_wait(2)
     
-    fetch_html(driver, url, game, provider)
+    fetch_html(driver, game, provider)
     
     fetch_thread = threading.Thread(target=fetch_hs_data, args=(driver, game,), daemon=True)
     fetch_thread.start()
     
-    prev_game, prev_provider, prev_url = game, provider, url
+    prev_game, prev_provider = game, provider
 
     try: 
         while not stop_event.is_set():
             try:
                 game = json.loads(r.get("game"))
                 provider = json.loads(r.get("provider"))
-                url = r.get("url")
                 
-                if (game, provider, url) != (prev_game, prev_provider, prev_url):
-                    log_message("info", "🔔 Game/Provider/URL changed!")
+                if (game, provider) != (prev_game, prev_provider):
+                    log_message("info", "🔔 Game/Provider changed!")
                     # Stop old threads
                     stop_event.set()
                     fetch_thread.join()
@@ -186,12 +192,12 @@ if __name__ == "__main__":
                     stop_event.clear()
                     # Refresh driver
                     # driver.get(url)
-                    fetch_html(driver, url, game, provider)
+                    fetch_html(driver, game, provider)
                     
                     fetch_thread = threading.Thread(target=fetch_hs_data, args=(driver, game,), daemon=True)
                     fetch_thread.start()
                         
-                    prev_game, prev_provider, prev_url = game, provider, url
+                    prev_game, prev_provider = game, provider
             except Exception as e:
                 log_message("error", f"Monitor loop error: {e}")
             finally:

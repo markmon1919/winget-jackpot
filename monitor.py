@@ -23,7 +23,6 @@ for key, value in os.environ.items():
         colors[key] = value.encode("utf-8").decode("unicode_escape")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL")
-API_PORT = os.getenv("API_PORT")
 REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
@@ -45,7 +44,7 @@ if not logger.handlers:
 class AutoState:
     game: dict = None
     provider: str = None
-    api_server: str = None
+    # api_server: str = None
     game_id: int = 0
     slot_size: str = None
     spin_btn: bool = False
@@ -144,7 +143,7 @@ class AutoState:
     hit_win: bool = False
     api_vol: float = 0.0
     api_vol_signal: str = None
-    api_vol_static: float = 0.0
+    # api_vol_static: float = 0.0
     rtp: bool = True
     rtp_val: float = 0.0
     last_rtp: bool = None
@@ -172,10 +171,10 @@ def get_sleep_times(auto_play_menu: bool=False):
         'd': 0.001  # 400 cps
     }
 
-def configure_game(game: dict, api_server: str, auto_mode: bool=False, fast_mode: bool=False, dual_slots: bool=False, split_screen: bool=False, left_slot: bool=False, right_slot: bool=False):#, forever_spin: bool=False):
+def configure_game(game: dict, auto_mode: bool=False, fast_mode: bool=False, dual_slots: bool=False, split_screen: bool=False, left_slot: bool=False, right_slot: bool=False):#, forever_spin: bool=False):
     state.game = game
     state.provider = game.get("provider")
-    state.api_server = api_server
+    # state.api_server = api_server
     state.auto_mode = auto_mode
     state.fast_mode = fast_mode
     state.dual_slots = dual_slots
@@ -3682,7 +3681,7 @@ def fetch_api_data():
                 f"\n\t{colored_volatility}"
                 f"\n\t{colored_volume}\n"
                 # f"\n\t{colors['WHTE']}Bet Level{colors['RES']}: {bet_lvl}{f'\t{colors['WHTE']}Last Spin{colors['RES']}: {f'{colors['BRED']}' + state.last_spin.replace('_', ' ').title() + f' {colors['BLNK']}🌀{colors['RES']}' if all([state.last_spin is not None, state.auto_mode]) else ''}'"
-                f"\n\t{colors['WHTE']}Bet Level{colors['RES']}: {bet_lvl:<17} {colors['WHTE']}Avg Data/Sec{colors['RES']}: {new_data_seconds:<21}    {colors['WHTE']}RTP {colors['RES']}: {colored_rtp}  {colors['WHTE']}Direction{colors['RES']}: {colored_direction} {colors['RES']}"
+                f"\n\t{colors['WHTE']}RTP{colors['RES']}: {colored_rtp} {colors['WHTE']}Direction{colors['RES']}: {colored_direction:<17} {colors['WHTE']}Avg Data/Sec{colors['RES']}: {new_data_seconds:<21}    {colors['WHTE']}Bet Level{colors['RES']}: {bet_lvl}{colors['RES']}"
                 # f"\n\t{colors['WHTE']}Last Trigger{colors['RES']}: {state.last_trigger}\n"
                 # f"\n\t{colors['WHTE']}Volatility Trigger{colors['RES']}: {volatility_trigger}\n"
                 # f"\n\t{colors['WHTE']}Volatility Check{colors['RES']}: {volatility_check}\n"
@@ -3739,283 +3738,184 @@ def fetch_api_data():
             log_message("error", f"[fetch_api_data] {e}", overwrite=True, _overlay_key="api_data")
             time.sleep(0.5)
 
-def get_game_name(game_id):
+def get_game_name(game_id: int):
     if not game_id:
         return f"No ID: {game_id}"
 
     try:
-        game = db["GAME"].find_one({"config.id": int(game_id)})
+        game = db["GAME"].find_one({"config.id": game_id})
     except:
         game = None
 
     if not game:
         return f"Unknown ({game_id})"
-
+    
     return game.get("name", f"Game {game_id}")
 
 def fetch_rtp_data():
-    prev_top_rtp_val = prev_top_rtp = prev_total_bet = None
-    last_top_rtp_val = last_top_rtp = last_total_bet = None
-    rtp_history = { "Hot": {}, "Recommended": {} }
+    rtp_history = {}
     elapsed_tracker = {}
     active_condition_ids = set()
 
-    while not stop_event.is_set():        
+    while not stop_event.is_set():
         try:
             rtp_data_raw = r.get("rtp_data")
-
             if not rtp_data_raw:
                 time.sleep(0.5)
                 continue
 
             rtp_data = json.loads(rtp_data_raw)
+            message = "\n"
+            games = rtp_data.get("rtp", [])
+            
+            if not games:
+                message += f"\n\t\t\tNo games found\n"
+                continue
 
-            # -------------------------
-            # TOP
-            # -------------------------
-            top_now = time.time()
-            top = rtp_data.get("top", {})
-            top_id = top.get("game_id")
-            top_name = get_game_name(top_id)
-            top_rtp = top.get("up")
-            top_rtp_val = str_to_float(top.get('rtp', '0'))
+            # for section in games:
+                # title = section.get("title", "Unknown")
+                # games = section.get("gameId", 0)
+                # message += f"\t[{colors['LCYN']}RTP{colors['RES']}]\n"
 
-            if top_name.lower() == game["name"].lower():
-                state.rtp = top_rtp
-                state.rtp_val = top_rtp_val
+                # if not games:
+                #     message += "\t\t\t  (empty)\n"
+                #     continue
 
-            top_name_display = (
-                f'{colors["BLNK"]}{colors["BLYEL"]}{top_name}{colors["RES"]}'
-                if top_name.lower() == game["name"].lower()
-                else (
-                    f'{colors["ORA"]}{top_name}{colors["RES"]}'
-                    if abs(top_rtp_val) >= 100
-                    else f'{colors["YEL"]}{top_name}{colors["RES"]}'
-                )
-            )
-            # top_rtp_display = (
-            #     f"{colors['LGRE']}⬆ {colors['GRE']}{top.get('rtp', '')}{colors['RES']}"
-            #     if top.get("up") is True
-            #     else f"{colors['LRED']}⬇ {colors['RED'] if float(top.get('rtp','0').replace('RTP:','').replace('%','')) <= 100 else colors['BLNK']}{top.get('rtp','')}{colors['RES']}"
-            # )
-            total_bet = top.get("total_bet")
+            def format_game(g):
+                now = time.time()
 
-            prev_top_rtp_val = 0.0 if prev_top_rtp_val is None else last_top_rtp_val if (top_rtp_val != last_top_rtp_val) else prev_top_rtp_val
-            prev_top_rtp = None if prev_top_rtp_val is None else last_top_rtp if (top_rtp_val != last_top_rtp_val) else prev_top_rtp
-            prev_total_bet = None if prev_top_rtp_val is None else last_total_bet if (total_bet != last_total_bet) else prev_total_bet
+                try:
+                    gid = g.get("gameId")
+                    name = get_game_name(gid)
+                    rtp = g.get("max") / 100
+                    current_rtp = False if g.get("trend") == 0 else True
+                    total_bet = f"{colors['LYEL']}₱{colors['LMAG']}{round(g.get("betAmount") / 100):,}"
 
-            # if abs(top_rtp_val) >= 100:
-            active_condition_ids.add(top_id)
-
-            if top_id not in elapsed_tracker:
-                elapsed_tracker[top_id] = top_now
-
-            elapsed = int(top_now - elapsed_tracker[top_id])
-            mins, secs = divmod(elapsed, 60)
-            elapsed_str = f"{colors['BLU']}⏱ {colors['LGRE'] if top_rtp else colors['LRED']}{mins:02d}:{secs:02d}{colors['RES']}"
-
-            # else:
-            #     elapsed_str = None
-
-            top_blinking = colors['BLNK'] if (top_rtp and top_rtp_val >= 99) else ""
-            top_color = colors['RED'] if not top_rtp else colors['GRE']
-            top_direction = f"{top_blinking}{colors['LRED']}⬇{colors['RES']}" if not top_rtp else f"{top_blinking}{colors['LGRE']}⬆{colors['RES']}"
-            top_signal = f"{colors['LCYN']}◆{colors['RES']}" if prev_top_rtp is None else f"{colors['LRED']}▼{colors['RES']}" if top_rtp_val < prev_top_rtp_val else f"{colors['LGRE']}▲{colors['RES']}" if top_rtp_val > prev_top_rtp_val else f"{colors['LCYN']}◆{colors['RES']}"
-            total_bet_signal = f"{colors['LCYN']}◆{colors['RES']}" if prev_total_bet is None else f"{colors['LRED']}▼{colors['RES']}" if total_bet < prev_total_bet else f"{colors['LGRE']}▲{colors['RES']}" if total_bet > prev_total_bet else f"{colors['LCYN']}◆{colors['RES']}"
-
-            top_rtp_display = f"{top_blinking}{top_direction} {top_color}{top_rtp_val} {colors['WHTE']}%{colors['RES']}"
-
-            # if elapsed_str:
-            #     top_rtp_display = f"{top_blinking}{top_direction} {top_color}{top_rtp_val} {colors['WHTE']}%{colors['RES']} {colors['BLU']}⏱ {colors['ORA']}{elapsed_str}{colors['RES']}"
-            # else:
-            #     top_rtp_display = f"{top_blinking}{top_direction} {top_color}{top_rtp_val} {colors['WHTE']}%{colors['RES']}"
-
-            prev_top_color =  colors['RED'] if (not prev_top_rtp and prev_top_rtp_val != 0.0) else colors['GRE'] if (prev_top_rtp and prev_top_rtp_val != 0.0) else colors['CYN']
-            prev_top_direction = f"{colors['LRED']}⬇{colors['RES']}" if (not prev_top_rtp and prev_top_rtp_val != 0.0) else f"{colors['LGRE']}⬆{colors['RES']}" if (prev_top_rtp and prev_top_rtp_val != 0.0) else f"{colors['LCYN']}◉{colors['RES']}"
-            prev_top_rtp_display = f"{colors['LYEL']}({prev_top_direction} {prev_top_color}{prev_top_rtp_val} {colors['WHTE']}%{colors['LYEL']}){colors['RES']} {elapsed_str}{colors['RES']}"
-
-            # if top_rtp_num >= 100 and top.get("up") is True:
-            #     active_condition_ids.add(top_id)
-
-            # if top_id not in elapsed_tracker:
-            #     elapsed_tracker[top_id] = top_now
-
-            #     elapsed = int(top_now - elapsed_tracker[top_id])
-            #     mins, secs = divmod(elapsed, 60)
-            #     elapsed_str = f"{mins:02d}:{secs:02d}"
-            # else:
-            #     elapsed_str = None
-                
-            # if top.get("up") is False and elapsed_str:
-            #     top_rtp_display += f" {colors['WHTE']}({colors['YEL']}{elapsed_str}{colors['WHTE']}){colors['RES']}"
-
-            message = (
-                f"\n{colors['WHTE']}RTP{colors['RES']}:"
-                f"\t[{colors['LCYN']}Top{colors['RES']}]\t{colors['WHTE']}- {top_name_display} "
-                f"{top_rtp_display} {top_signal} {prev_top_rtp_display} {colors['WHTE']}| {colors['BLGRE']}₱ {colors['BLMAG']}{total_bet} {total_bet_signal}{colors['RES']}\n"
-            )
-
-            # -------------------------
-            # LISTS
-            # -------------------------
-            lists = rtp_data.get("lists", [])
-
-            if not lists:
-                message += f"\n\t\t\tNo lists found\n"
-
-            for section in lists:
-                title = section.get("title", "Unknown")
-                games = section.get("games", [])
-
-                message += f"\t[{colors['LCYN']}{title}{colors['RES']}]\n"
-
-                if not games:
-                    message += "\t\t\t  (empty)\n"
-                    continue
-
-                def format_game(g):
-                    now = time.time()
-
-                    try:
-                        gid = g.get("game_id")
-                        name = get_game_name(gid)
-
-                        if not name:
-                            log_message("error", f"Missing game name for gid={gid} {e}")
-                        ...
-                    except Exception as e:
-                        log_message("error", f"format_game crash gid={g.get('game_id')} {e}")
-                        # raise
-
-                    rtp_val = str_to_float(g.get("rtp", "").replace("RTP:", "").replace("%", ""))
-                    section_history = rtp_history.setdefault(title, {})
-
-                    # initialize game history
-                    if gid not in section_history:
-                        section_history[gid] = {
-                            "last_rtp_val": None,
-                            "prev_rtp_val": 0.0,
-                            "last_rtp": None,
-                            "prev_rtp": None,
-                        }
-
-                    hist = section_history[gid]
-                    last_rtp_val = hist["last_rtp_val"]
-                    prev_rtp_val = hist["prev_rtp_val"]
-                    last_rtp = hist["last_rtp"]
-                    prev_rtp = hist["prev_rtp"]
-
-                    # only shift if changed
-                    if last_rtp_val is not None and rtp_val != last_rtp_val:
-                        prev_rtp_val = last_rtp_val
-                        prev_rtp = last_rtp
-
-                    # update current values
-                    hist["last_rtp_val"] = rtp_val
-                    hist["last_rtp"] = g.get("rtp")
-
-                    hist["prev_rtp_val"] = prev_rtp_val
-                    hist["prev_rtp"] = prev_rtp
-
-                    # highlight selected game
-                    if name.lower() == game["name"].lower():
-                        if title == "Hot":
-                            state.rtp = g.get("up")
-                            state.rtp_val = rtp_val
-
-                        if all([state.hit_win, state.session_mode == "HOT"]):
-                            name_display = f"{colors['BLNK']}{colors['BLYEL']}{name}{colors['RES']}"
-                        else:
-                            name_display = f"{colors['BLYEL']}{name}{colors['RES']}"
-                    else:
-                        name_display = f"{colors['ORA'] if abs(rtp_val) >= 100 else colors['DGRY']}{name}{colors['RES']}"
-
-                    # if abs(rtp_val) >= 100:
-                    active_condition_ids.add(gid)
-
-                    if gid not in elapsed_tracker:
-                        elapsed_tracker[gid] = now
-
-                    elapsed = int(now - elapsed_tracker[gid])
-                    mins, secs = divmod(elapsed, 60)
-                    elapsed_str = f"{colors['BLU']}⏱ {colors['LGRE'] if g.get('up') else colors['LRED']}{mins:02d}:{secs:02d}{colors['RES']}"
-                    # else:
-                    #     elapsed_str = None
-
-                    blinking = colors['BLNK'] if (g.get("up") and rtp_val >= 99) else ""
-                    color = colors['RED'] if not g.get("up") else colors['GRE']
-                    direction = f"{blinking}{colors['LRED']}⬇{colors['RES']}" if not g.get("up") else f"{blinking}{colors['LGRE']}⬆{colors['RES']}"
-                    signal = f"{colors['LCYN']}◆{colors['RES']}" if prev_rtp is None else f"{colors['LRED']}▼{colors['RES']}" if rtp_val < prev_rtp_val else f"{colors['LGRE']}▲{colors['RES']}" if rtp_val > prev_rtp_val else f"{colors['LCYN']}◆{colors['RES']}"
-
-                    rtp_display = f"{blinking}{direction} {color}{rtp_val} {colors['WHTE']}%{colors['RES']}"
-
-                    prev_color =  colors['RED'] if (not prev_rtp and prev_rtp_val != 0.0) else colors['GRE'] if (prev_rtp and prev_rtp_val != 0.0) else colors['CYN']
-                    prev_direction = f"{colors['LRED']}⬇{colors['RES']}" if (not prev_rtp and prev_rtp_val != 0.0) else f"{colors['LGRE']}⬆{colors['RES']}" if (prev_rtp and prev_rtp_val != 0.0) else f"{colors['LCYN']}◉{colors['RES']}"
-                    prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp_val} {colors['WHTE']}%{colors['LYEL']}) {elapsed_str}{colors['RES']}"
-
-                    # if elapsed_str:
-                    #     prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp_val} {colors['WHTE']}%{colors['LYEL']}) {colors['BLU']}⏱ {colors['ORA']}{elapsed_str}{colors['RES']}"
-                    # else:
-                    #     prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp_val} {colors['WHTE']}%{colors['LYEL']})"
-
-                    return f"\t{colors['WHTE']}- {name_display} {rtp_display} {signal} {prev_rtp_display} {colors['RES']}"
-
-                # 🔥 HOT section = 2 columns
-                # helper: strip ANSI for accurate width
-                # ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
-
-                # def visible_len(s):
-                #     return len(ansi_escape.sub('', s))
-
-                # def pad_right(s, width):
-                #     return s + ' ' * max(0, width - visible_len(s))
-                
-                # if title == "Hot":
-                #     formatted = []
-                    
-                #     for g in games:
-                #         try:
-                #             formatted.append(format_game(g))
-                #         except Exception as e:
-                #             formatted.append(f"<error {g.get('game_id')}>")
-
-                #     # split into two balanced columns (top-to-bottom)
-                #     mid = (len(formatted) + 1) // 2
-                #     left_col = formatted[:mid]
-                #     right_col = formatted[mid:]
-                #     # find max visible width of left column
-                #     max_left_width = max(visible_len(x) for x in left_col)
-
-                #     for i in range(mid):
-                #         left = left_col[i]
-                #         right = right_col[i] if i < len(right_col) else ""
-                #         left_padded = pad_right(left, max_left_width + 1)
+                    if not name:
+                        log_message("error", f"Missing game name for gid={gid} {e}")
                         
-                #         message += f"\t{left_padded}{right}\n"
+                except Exception as e:
+                    log_message("error", f"format_game crash gid={g.get('gameId')} {e}")
+                    # raise
+
+                # rtp_val = str_to_float(g.get("rtp", "").replace("RTP:", "").replace("%", ""))
+                # section_history = rtp_history.setdefault("rtp", {})
+
+                # initialize game history
+                if gid not in rtp_history:
+                    rtp_history[gid] = {
+                        "last_rtp": None,
+                        "prev_rtp": 0.0
+                    }
+
+                hist = rtp_history[gid]
+                last_rtp = hist["last_rtp"]
+                prev_rtp = hist["prev_rtp"]
+
+                # only shift if changed
+                if last_rtp is not None and rtp != last_rtp:
+                    prev_rtp = last_rtp
+
+                # update current values
+                hist["last_rtp"] = rtp
+                hist["prev_rtp"] = prev_rtp
+
+                # highlight selected game
+                if name.lower() == game["name"].lower():
+                    # if title == "Hot":
+                    state.rtp = current_rtp
+                    # state.rtp_val = rtp_val
+
+                    if all([state.hit_win, state.session_mode == "HOT"]):
+                        name_display = f"{colors['BLNK']}{colors['BLYEL']}{name}{colors['RES']}"
+                    else:
+                        name_display = f"{colors['BLYEL']}{name}{colors['RES']}"
+                else:
+                    name_display = f"{colors['ORA'] if rtp >= 100 else colors['DGRY']}{name}{colors['RES']}"
+
+                # if abs(rtp_val) >= 100:
+                active_condition_ids.add(gid)
+
+                if gid not in elapsed_tracker:
+                    elapsed_tracker[gid] = now
+
+                elapsed = int(now - elapsed_tracker[gid])
+                mins, secs = divmod(elapsed, 60)
+                elapsed_str = f"{colors['BLU']}⏱ {colors['LGRE'] if current_rtp else colors['LRED']}{mins:02d}:{secs:02d}{colors['RES']}"
                 # else:
-                #     # normal single column
-                #     for g in games:
-                #         try:
-                #             message += f"\t{format_game(g)}\n"
-                #         except Exception as e:
-                #             message += f"\t<error rendering game {g.get('game_id')}: {e}>\n"
+                #     elapsed_str = None
 
-                for g in games:
-                    try:
-                        message += f"\t{format_game(g)}\n"
-                    except Exception as e:
-                        message += f"\t<error rendering game {g.get('game_id')}: {e}>\n"
+                blinking = colors['BLNK'] if (current_rtp and rtp >= 99) else ""
+                color = colors['RED'] if not current_rtp else colors['GRE']
+                direction = f"{blinking}{colors['LRED']}⬇{colors['RES']}" if not current_rtp else f"{blinking}{colors['LGRE']}⬆{colors['RES']}"
+                signal = f"{colors['LCYN']}◆{colors['RES']}" if prev_rtp is None else f"{colors['LRED']}▼{colors['RES']}" if rtp < prev_rtp else f"{colors['LGRE']}▲{colors['RES']}" if rtp > prev_rtp else f"{colors['LCYN']}◆{colors['RES']}"
 
-            if top_id not in active_condition_ids:
-                elapsed_tracker.pop(top_id, None)
+                rtp_display = f"{blinking}{direction} {color}{rtp:.2f} {colors['WHTE']}%{colors['RES']}"
+
+                prev_color =  colors['RED'] if (not prev_rtp and prev_rtp != 0.0) else colors['GRE'] if (prev_rtp and prev_rtp != 0.0) else colors['CYN']
+                prev_direction = f"{colors['LRED']}⬇{colors['RES']}" if (not prev_rtp and prev_rtp != 0.0) else f"{colors['LGRE']}⬆{colors['RES']}" if (prev_rtp and prev_rtp != 0.0) else f"{colors['LCYN']}◉{colors['RES']}"
+                prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp} {colors['WHTE']}%{colors['LYEL']}) {elapsed_str}{colors['RES']}"
+
+                # if elapsed_str:
+                #     prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp_val} {colors['WHTE']}%{colors['LYEL']}) {colors['BLU']}⏱ {colors['ORA']}{elapsed_str}{colors['RES']}"
+                # else:
+                #     prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp_val} {colors['WHTE']}%{colors['LYEL']})"
+
+                return f"{colors['WHTE']}- {name_display} {rtp_display} {signal} {prev_rtp_display} {total_bet} {colors['RES']}"
+
+            # 🔥 HOT section = 2 columns
+            # helper: strip ANSI for accurate width
+            # ansi_escape = re.compile(r'\x1b\[[0-9;]*m')
+
+            # def visible_len(s):
+            #     return len(ansi_escape.sub('', s))
+
+            # def pad_right(s, width):
+            #     return s + ' ' * max(0, width - visible_len(s))
+            
+            # if title == "Hot":
+            #     formatted = []
+                
+            #     for g in games:
+            #         try:
+            #             formatted.append(format_game(g))
+            #         except Exception as e:
+            #             formatted.append(f"<error {g.get('game_id')}>")
+
+            #     # split into two balanced columns (top-to-bottom)
+            #     mid = (len(formatted) + 1) // 2
+            #     left_col = formatted[:mid]
+            #     right_col = formatted[mid:]
+            #     # find max visible width of left column
+            #     max_left_width = max(visible_len(x) for x in left_col)
+
+            #     for i in range(mid):
+            #         left = left_col[i]
+            #         right = right_col[i] if i < len(right_col) else ""
+            #         left_padded = pad_right(left, max_left_width + 1)
+                    
+            #         message += f"\t{left_padded}{right}\n"
+            # else:
+            #     # normal single column
+            #     for g in games:
+            #         try:
+            #             message += f"\t{format_game(g)}\n"
+            #         except Exception as e:
+            #             message += f"\t<error rendering game {g.get('game_id')}: {e}>\n"
+
+            for g in games:
+                try:
+                    message += f"\t{format_game(g)}\n"
+                except Exception as e:
+                    message += f"\t<error rendering game {g.get('gameId')}: {e}>\n"
 
             for gid in list(elapsed_tracker.keys()):
                 if gid not in active_condition_ids:
                     elapsed_tracker.pop(gid, None)
 
-            last_top_rtp_val = top_rtp_val
-            last_top_rtp = top_rtp
-            last_total_bet = total_bet
+            # last_top_rtp_val = top_rtp_val
+            # last_top_rtp = top_rtp
+            # last_total_bet = total_bet
 
             log_message("info", message, overwrite=True, _overlay_key="rtp_data")
             stop_event.wait(0.5)
@@ -4025,82 +3925,82 @@ def fetch_rtp_data():
 
 def fetch_winners_data():
     state.hit_win = False
-    
+    # winners_list = []
+    message = deque(maxlen=12)
+
     while not stop_event.is_set():
         try:
             winners_data_raw = r.get("winners_data")
             if not winners_data_raw:
-                time.sleep(0.5)
+                # time.sleep(0.5)
                 continue
 
+            winners_data = json.loads(winners_data_raw)
             data_hash = hashlib.md5(winners_data_raw.encode()).hexdigest()
             winners_data = json.loads(winners_data_raw)
 
-            if state.last_winners_hash != data_hash:
+            if state.last_winners_hash != data_hash: 
                 state.last_winners_hash = data_hash
-                state.api_vol_static = float(state.api_vol)
+                winners_data['volume_hit'] = float(state.api_vol)                
+            else: continue
+
+            timestamp = winners_data.get("createTime") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            game_name = (
+                get_game_name(winners_data.get("gameId"))
+                if winners_data.get("gameId")
+                else winners_data.get("gameName")
+            )
+
+            winner_game = db["GAME"].find_one(
+                {"name": game_name},
+                {"config.slot_size": 1, "_id": 0}
+            )
+
+            winner_is_slot = (
+                winner_game.get("config", {}).get("slot_size")
+                if winner_game else None if game_name.__contains__("Baccarat")
+                else "UNKNOWN"
+            )
+
+            # Skip if one is a slot and the other isn't
+            if (winner_is_slot is not None) != (state.slot_size is not None): continue
+
+            is_current_game = game_name.lower() == game["name"].lower()
             
-            avg_sec, last_hit = avg_interval_seconds(winners_data, game["name"])
-            trend_timer = ""
-
-            if avg_sec and last_hit:
-                trend_timer = trend_countdown(last_hit, avg_sec)
-                
-            # message = f"\n\t{colors['WHTE']}Winners Data{colors['RES']}: {colors['LRED'] if state.hit_win else colors['BLU']}{state.hit_win}{colors['RES']}\n"
-
-            # message = (
-            #     f"\t{colors['WHTE']}Winners Data{colors['RES']}: {colors['LRED'] if state.hit_win else colors['BLU']}{state.hit_win}{colors['RES']}"
-            #     f"\t{colors['WHTE']}Next Trend ETA{colors['RES']}: {colors['ORA']}{trend_timer}{colors['RES']}\n"
-            # )
-            message = ""
-
-            game_counts = defaultdict(int)
+            colored_ago = f"{colors['CYN'] if (is_current_game) else colors['DGRY']}⏱ {time_ago(timestamp) if (is_current_game) else timestamp}{colors['RES']}"
+            colored_game = f"{colors['BLRED']}{game_name}{colors['RES']}" if (is_current_game and winners_data.get("gameId")) else f"{colors['BLYEL']}{game_name}{colors['RES']}" if (is_current_game and not winners_data.get("gameId")) else f"{colors['DGRY']}{game_name}{colors['RES']}"
             
-            for winner in winners_data:
-                # user = winner.get("user", "")
-                timestamp = winner.get("time", "")
-                game_name = winner.get("game", "")
-                is_current_game = game_name.lower() == game["name"].lower()
-                
-                if any([
-                    not is_current_game and game_counts[game_name] >= 2,
-                    is_current_game and game_counts[game_name] >= 4
-                ]): continue
-                
-                game_counts[game_name] += 1
-                
-                colored_ago = f"{colors['CYN'] if (is_current_game) else colors['DGRY']}⏱ {time_ago(timestamp) if (is_current_game) else timestamp}{colors['RES']}"
-                colored_game = f"{colors['BLYEL']}{game_name}{colors['RES']}" if (is_current_game) else f"{colors['DGRY']}{game_name}{colors['RES']}"
-                
-                bet = winner.get("bet", "")
-                multiplier = winner.get("multiplier", "")
-                payout = f"{colors['LGRE'] if (is_current_game) else colors['DGRY']}₱{colors['ORA'] if (is_current_game) else colors['DGRY']}{round(str_to_float(bet) * str_to_float(multiplier), 2):,.2f}{colors['RES']}"
-                
-                colored_bet = f"{colors['LGRE'] if (is_current_game) else colors['DGRY']}₱{colors['BLCYN'] if (is_current_game) else colors['DGRY']}{round(str_to_float(bet)) if str_to_float(bet).is_integer() else str_to_float(bet)}{colors['RES']}"
-                colored_multiplier = f"{colors['LYEL'] if (is_current_game) else colors['DGRY']}x{colors['BLMAG'] if (is_current_game) else colors['DGRY']}{str_to_float(multiplier)}{colors['RES']}"
+            bet = winners_data.get("betAmount")
+            multiplier = winners_data.get("betMul")
+            payout = (
+                winners_data.get("payOut")
+                if winners_data.get("payOut") else
+                round(bet * str_to_float(multiplier), 2)
+            )
+            
+            colored_bet = f"{colors['LGRE'] if (is_current_game) else colors['DGRY']}₱{colors['BLCYN'] if (is_current_game) else colors['DGRY']}{round(bet) if bet.is_integer() else bet}{colors['RES']}"
+            colored_multiplier = f"{colors['LYEL'] if (is_current_game) else colors['DGRY']}x{colors['BLMAG'] if (is_current_game) else colors['DGRY']}{round(str_to_float(multiplier), 2)}{colors['RES']}"
+            colored_payout = f"{colors['LGRE'] if (is_current_game) else colors['DGRY']}₱{colors['ORA'] if (is_current_game) else colors['DGRY']}{payout:,.2f}{colors['RES']}"
 
-                if state.api_vol_static != 0.0:
-                    vol = state.api_vol_static
-
-                    colored_api_volume = (
-                        f"{colors['BLMAG'] if vol >= 200 else
-                        colors['BLRED'] if vol >= 150 else
-                        colors['ORA'] if vol >= 120 else
-                        colors['BLYEL'] if vol >= 90 else
-                        colors['BLCYN'] if vol >= 50 else
-                        colors['BLGRE'] if vol >= 10 else
-                        colors['DGRY']}"
-                        f"{vol:.2f}{colors['RES']}"
-                    )
-                
-                # message += f"\n\t[ {colored_game} ]{colors['WHTE']} - {colored_bet} {colored_multiplier} {colors['WHTE']}= {payout} {colored_ago}"
-                message += (
-                    f"\n\t[ {colored_game} ]{colors['WHTE']} - {colored_bet} {colored_multiplier} {colors['WHTE']}= {payout} {colored_ago}"
-                    f"{f' | {colors['WHTE']}Volume Hit{colors['RES']}: {colored_api_volume}' if is_current_game and state.api_vol_static != 0.0 else ''}"
-                )
+            colored_api_volume = (
+                f"{colors['BLMAG'] if winners_data.get("volume_hit") >= 200 else
+                colors['BLRED'] if winners_data.get("volume_hit") >= 150 else
+                colors['ORA'] if winners_data.get("volume_hit") >= 120 else
+                colors['BLYEL'] if winners_data.get("volume_hit") >= 90 else
+                colors['BLCYN'] if winners_data.get("volume_hit") >= 50 else
+                colors['BLGRE'] if winners_data.get("volume_hit") >= 10 else
+                colors['DGRY']}"
+                f"{colors['RES']}| {colors['WHTE']}Vol Hit{colors['RES']}: {winners_data.get("volume_hit"):.2f}" if (is_current_game) else f"{colors['RES']}"
+            )
+                    
+            message.append(
+                f"\n\t[ {colored_game} ]{colors['WHTE']} - {colored_bet} {colored_multiplier} {colors['WHTE']}= {colored_payout} {colored_ago}"
+                f"{f' {colored_api_volume}'}"
+            )
                         
-            log_message("info", message, overwrite=True, _overlay_key="winners_data")
-            stop_event.wait(0.5)
+            log_message("info", "".join(message), overwrite=True, _overlay_key="winners_data")
+            # stop_event.wait(0.5)
         except Exception as e:
             log_message("error", f"[fetch_winners_data] {e}", overwrite=True, _overlay_key="winners_data")
             time.sleep(0.5)
@@ -4486,26 +4386,26 @@ if __name__ == "__main__":
     # play_alert(game.get("name"))
     alert_queue.put(game.get("name"))
     
-    urls_env = os.getenv("URLS")
-    URLS_LIST = [url.strip() for url in urls_env.split(",") if urls_env.strip()]
-    URLS = {url: url for url in URLS_LIST}
-    url = next((url for url in URLS if 'win' in url), None)    
+    # urls_env = os.getenv("URLS")
+    # URLS_LIST = [url.strip() for url in urls_env.split(",") if urls_env.strip()]
+    # URLS = {url: url for url in URLS_LIST}
+    # url = next((url for url in URLS if 'win' in url), None)    
 
     # # store current game in file
     # with open(GAME_FILE, "w", encoding="utf-8") as f:
     #     f.write(game)
     
-    servers_env = os.getenv("WS_URL")
-    SERVERS_LIST = [url.strip() for url in servers_env.split(",") if servers_env.strip()]
-    API_SERVERS = {url: url for url in SERVERS_LIST}
-    api_server = next((url for url in API_SERVERS if 'localhost' in url), None) # local
+    # servers_env = os.getenv("WS_URL")
+    # SERVERS_LIST = [url.strip() for url in servers_env.split(",") if servers_env.strip()]
+    # API_SERVERS = {url: url for url in SERVERS_LIST}
+    # api_server = next((url for url in API_SERVERS if 'localhost' in url), None) # local
     # # api_server = f"wss://{VPS_DOMAIN}/ws" # vps
     redis_key = f"api_data:{game['name']}:{provider['initial']}"
     
     r.set("game", json.dumps(game))
     r.set("provider", json.dumps(provider))
-    r.set("url", url)
-    r.set("api_server", api_server)
+    # r.set("url", url)
+    # r.set("api_server", api_server)
     
     user_input = input(f"\n\n\tDo you want to enable {colors.get('CYN')}Auto Mode{colors.get('RES')} ({colors.get('DGRY')}Y/n{colors.get('RES')}): ").strip().lower()
     auto_mode = user_input in ("", "y", "yes") # default to yes
@@ -4535,7 +4435,7 @@ if __name__ == "__main__":
     
     # breakout = load_breakout_memory(game)
     state = AutoState()
-    settings = configure_game(game, api_server, auto_mode, fast_mode, dual_slots, split_screen, left_slot, right_slot)#, forever_spin)
+    settings = configure_game(game, auto_mode, fast_mode, dual_slots, split_screen, left_slot, right_slot)#, forever_spin)
     
     # cx, cy = CENTER_X, CENTER_Y
 
@@ -4610,7 +4510,7 @@ if __name__ == "__main__":
 
         # 3️⃣ Cleanup Redis
         try:
-            r.delete("game", "provider", "url", "game_data", redis_key)
+            r.delete("game", "provider", "game_data", redis_key)
             # r.delete("game", "provider", "url", "api_server", "game_data", "hs_data", "api_data", "rtp_data", "winners_data")
             r.close()
         except Exception:

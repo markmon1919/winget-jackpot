@@ -4,11 +4,12 @@ declare -a PIDS=(``)
 
 PIDS+=(`ps aux | grep "'[p]ython'\|uvicorn\|selenium\|webdriver" | grep -v grep | awk '{print $2}'`)
 port_pid=(`lsof -i :8080 | awk '{print$2}' | tail -n +2`)
-port_pid2=(`lsof -i :3333 | awk '{print$2}' | tail -n +2`)
-port_pid3=(`lsof -i :4444 | awk '{print$2}' | tail -n +2`)
+port_pid2=(`lsof -i :8888 | awk '{print$2}' | tail -n +2`)
+port_pid3=(`lsof -i :7777 | awk '{print$2}' | tail -n +2`)
+port_pid4=(`lsof -i :6666 | awk '{print$2}' | tail -n +2`)
 
 if [[ -z "$port_pid" ]]; then
-    PIDS+=("$port_pid" "$port_pid2" "$port_pid3")
+    PIDS+=("$port_pid" "$port_pid2" "$port_pid3" "$port_pid4")
 fi
 
 # Check if list is empty
