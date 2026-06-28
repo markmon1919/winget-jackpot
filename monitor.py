@@ -3943,7 +3943,7 @@ def fetch_winners_data():
                 state.last_winners_hash = data_hash
                 if (
                     not winners_data.get("gameId")
-                    and any(x in winners_data.get("gameName") for x in ("Baccarat", "Tongits", "Crazy Time", "Blackjack", "Roulette", "Live"))
+                    and any(x in winners_data.get("gameName") for x in ("Baccarat", "Tongits", "Crazy Time", "Blackjack", "Roulette", "Colour Game", "Live"))
                 ): continue
                 winners_data['volume_hit'] = float(state.api_vol)
             else: continue
