@@ -48,6 +48,7 @@ last_min10s = {}             # requestFrom -> float
 latest_data = {}             # {"game": {provider: data}}
 webtransport_sessions = {}   # sid -> {"protocol": QuicConnectionProtocol, "send_datagram": fn}
 current_game = None          # {"name":..., "provider":...}
+redis_key = {}
 
 # ────────────── Utility functions ──────────────
 async def broadcast(data):
@@ -160,7 +161,7 @@ class WebTransportProtocol(QuicConnectionProtocol):
                 self.transmit()
 
                 # Send latest snapshot immediately
-                for provider, data in latest_data.items():
+                for data in latest_data.items():
                     self._quic.send_datagram_frame(json.dumps(data).encode("utf-8"))
 
             elif isinstance(h3_event, DataReceived):
@@ -187,6 +188,7 @@ async def quic_server():
         await server.wait_closed()
         
         try:
+            r.delete(redis_key)
             r.close()
         except Exception:
             pass

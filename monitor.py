@@ -2413,47 +2413,47 @@ def time_ago(timestamp_str: str) -> str:
         hours = int((total_seconds % 86400) // 3600)
         return f"{colors['WHTE']}{days} day{'s' if days != 1 else ''} {hours} hr{'s' if hours != 1 else ''} ago"
 
-def avg_interval_seconds(winners_data, game_name, sample=5):
-    times = []
+# def avg_interval_seconds(winners_data, game_name, sample=5):
+#     times = []
 
-    for w in winners_data:
-        if w.get("game", "").lower() == game_name.lower():
-            ts = datetime.strptime(w["time"], "%Y-%m-%d %H:%M:%S")
-            times.append(ts)
+#     for w in winners_data:
+#         if w.get("game", "").lower() == game_name.lower():
+#             ts = datetime.strptime(w["time"], "%Y-%m-%d %H:%M:%S")
+#             times.append(ts)
 
-    if len(times) < 2:
-        return None, None
+#     if len(times) < 2:
+#         return None, None
 
-    times.sort(reverse=False)
+#     times.sort(reverse=False)
 
-    diffs = [
-        (times[i] - times[i+1]).total_seconds()
-        for i in range(min(sample, len(times) - 1))
-    ]
+#     diffs = [
+#         (times[i] - times[i+1]).total_seconds()
+#         for i in range(min(sample, len(times) - 1))
+#     ]
 
-    avg_sec = sum(diffs) / len(diffs)
-    return avg_sec, times[0]  # average, last hit
+#     avg_sec = sum(diffs) / len(diffs)
+#     return avg_sec, times[0]  # average, last hit
 
-def trend_countdown(last_hit, avg_sec):
-    eta = last_hit + timedelta(seconds=avg_sec)
-    diff = (eta - datetime.now()).total_seconds()
+# def trend_countdown(last_hit, avg_sec):
+#     eta = last_hit + timedelta(seconds=avg_sec)
+#     diff = (eta - datetime.now()).total_seconds()
 
-    tag = f"{colors['BLNK']}🔥{colors['RES']}"
+#     tag = f"{colors['BLNK']}🔥{colors['RES']}"
 
-    if diff <= 0:
-        state.hit_win = True
-        return f"{colors['RED']}Due Now {tag}{colors['RES']}"
+#     if diff <= 0:
+#         state.hit_win = True
+#         return f"{colors['RED']}Due Now {tag}{colors['RES']}"
 
-    if diff < 10:
-        state.hit_win = True
-        return f"{colors['BLNK']}{diff:.1f}s {tag}{colors['RES']}"
+#     if diff < 10:
+#         state.hit_win = True
+#         return f"{colors['BLNK']}{diff:.1f}s {tag}{colors['RES']}"
 
-    if diff < 60:
-        return f"{int(diff)}s"
+#     if diff < 60:
+#         return f"{int(diff)}s"
 
-    minutes = int(diff // 60)
-    seconds = int(diff % 60)
-    return f"{minutes}m {seconds}s"
+#     minutes = int(diff // 60)
+#     seconds = int(diff % 60)
+#     return f"{minutes}m {seconds}s"
 
 def str_to_float(s):
     # Keep digits and decimal points only
@@ -3925,8 +3925,9 @@ def fetch_rtp_data():
 
 def fetch_winners_data():
     state.hit_win = False
-    # winners_list = []
-    message = deque(maxlen=12)
+    winners_len = 30 if provider.get("initial") == "OMNI" else 12
+    message = deque(maxlen=winners_len)
+    both_colors_alerted = False 
 
     while not stop_event.is_set():
         try:
@@ -3954,8 +3955,8 @@ def fetch_winners_data():
 
             winner_game = db["GAME"].find_one(
                 {"name": game_name},
-                {"config.slot_size": 1, "_id": 0}
-            )
+                {"config.slot_size": 1, "_id": 0, "provider": 1}
+            ) or {}
 
             winner_is_slot = (
                 winner_game.get("config", {}).get("slot_size")
@@ -3966,10 +3967,15 @@ def fetch_winners_data():
             # Skip if one is a slot and the other isn't
             if (winner_is_slot is not None) != (state.slot_size is not None): continue
 
-            is_current_game = game_name.lower() == game["name"].lower()
+            # is_current_game = True if "OMNI" in provider.get("initial") and winner_game.get("config", {}).get("provider") else game_name.lower() == game["name"].lower()
+            is_current_game = (
+                winner_game.get("provider", "UNKNOWN") == provider.get("initial")
+                if "OMNI" in provider.get("initial", "")
+                else game_name.lower() == game["name"].lower()
+            )
             
             colored_ago = f"{colors['CYN'] if (is_current_game) else colors['DGRY']}⏱ {time_ago(timestamp) if (is_current_game) else timestamp}{colors['RES']}"
-            colored_game = f"{colors['BLRED']}{game_name}{colors['RES']}" if (is_current_game and winners_data.get("gameId")) else f"{colors['BLYEL']}{game_name}{colors['RES']}" if (is_current_game and not winners_data.get("gameId")) else f"{colors['DGRY']}{game_name}{colors['RES']}"
+            colored_game = f"{colors['BLRED']}{game_name}{colors['RES']}" if (is_current_game and winners_data.get("gameId")) else f"{colors['BLYEL']}{game_name}{colors['RES']}" if (is_current_game and not winners_data.get("gameId")) else f"{colors['WHTE']}{game_name}{colors['RES']}"
             
             bet = winners_data.get("betAmount")
             multiplier = winners_data.get("betMul")
@@ -3991,19 +3997,33 @@ def fetch_winners_data():
                 colors['BLCYN'] if winners_data.get("volume_hit") >= 50 else
                 colors['BLGRE'] if winners_data.get("volume_hit") >= 10 else
                 colors['DGRY']}"
-                f"{colors['RES']}| {colors['WHTE']}Vol Hit{colors['RES']}: {winners_data.get("volume_hit"):.2f}" if (is_current_game) else f"{colors['RES']}"
+                f"{winners_data.get("volume_hit"):.2f}{colors['RES']}"
             )
+
+            colored_vol_hit = f"{colors['RES']}| {colors['WHTE']}Vol Hit{colors['RES']}: {colored_api_volume}" if (is_current_game) else f"{colors['RES']}"
                     
             message.append(
                 f"\n\t[ {colored_game} ]{colors['WHTE']} - {colored_bet} {colored_multiplier} {colors['WHTE']}= {colored_payout} {colored_ago}"
-                f"{f' {colored_api_volume}'}"
+                f"{f' {colored_vol_hit}'}"
             )
+
+            joined = "".join(message)
+
+            has_red = colors["BLRED"] in joined
+            has_yellow = colors["BLYEL"] in joined
+
+            if has_red and has_yellow:
+                if not both_colors_alerted:
+                    both_colors_alerted = True
+                    alert_queue.put("trending")
+            else:
+                both_colors_alerted = False
                         
             log_message("info", "".join(message), overwrite=True, _overlay_key="winners_data")
-            # stop_event.wait(0.5)
+            stop_event.wait(0.2)
         except Exception as e:
-            log_message("error", f"[fetch_winners_data] {e}", overwrite=True, _overlay_key="winners_data")
-            time.sleep(0.5)
+            log_message("error", f"[fetch_winners_data] {game_name} {e}", overwrite=True, _overlay_key="winners_data")
+            time.sleep(0.2)
 
 def get_jackpot_bar(percentage: float, color: str, bar_length: int=20) -> str:
     filled_blocks = round((percentage / 100) * bar_length)

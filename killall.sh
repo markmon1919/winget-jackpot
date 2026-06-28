@@ -1,39 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-declare -a PIDS=(``)
 
-PIDS+=(`ps aux | grep "'[p]ython'\|uvicorn\|selenium\|webdriver" | grep -v grep | awk '{print $2}'`)
-port_pid=(`lsof -i :8080 | awk '{print$2}' | tail -n +2`)
-port_pid2=(`lsof -i :8888 | awk '{print$2}' | tail -n +2`)
-port_pid3=(`lsof -i :7777 | awk '{print$2}' | tail -n +2`)
-port_pid4=(`lsof -i :6666 | awk '{print$2}' | tail -n +2`)
+set -euo pipefail
 
-if [[ -z "$port_pid" ]]; then
-    PIDS+=("$port_pid" "$port_pid2" "$port_pid3" "$port_pid4")
-fi
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+PIDFILE="$BASE_DIR/backend.pid"
 
-# Check if list is empty
-if [[ ${#PIDS[@]} -eq 0 ]]; then
-    echo "No processes found."
-    exit 0
-fi
+if [[ -f "$PIDFILE" ]]; then
+    pid=$(cat "$PIDFILE")
 
-# Kill the processes
-for pid in "${PIDS[@]}"; do
     if kill -0 "$pid" 2>/dev/null; then
-        kill -9 "$pid"
-        echo "Killing Process: $pid"
-    else
-        echo "PID $pid does not exist or already terminated."
+        echo "Stopping backend supervisor ($pid)..."
+        kill -TERM "$pid"
+        exit 0
     fi
-done
+fi
 
-ps aux | grep data.py | grep -v grep | awk '{print $2}' | xargs kill
-ps aux | grep redis-server | grep -v grep | awk '{print $2}' | xargs kill
-
-
-# if [[ -z "$1" ]]; then
-#     ps aux | grep '[p]ython' | awk '{print $2}' | xargs kill -9
-# else
-#     ps aux | grep '[p]ython' | awk '{print $2}' | grep -v "$1" | xargs kill -9
-# fi
+echo "Backend is not running."

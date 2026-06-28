@@ -275,7 +275,7 @@ GAME_CONFIGS = {
     "Lucky Piggy": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Mafia Mayhem": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Mahjong Ways": GameConfig(9593, "small", False, True, True, None, False, False, "PG"),
-    "Mahjong Ways 2": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
+    "Mahjong Ways 2": GameConfig(9594, "small", False, True, True, None, False, False, "PG"),
     "Majestic Treasures": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Mask Carnival": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
     "Medusa": GameConfig(0, "small", False, True, True, None, False, False, "PG"),
