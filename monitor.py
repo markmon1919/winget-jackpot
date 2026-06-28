@@ -2,9 +2,9 @@
 
 
 import hashlib, json, logging, math, os, platform, pyautogui, random, re, redis, subprocess, sys, time, threading
-from collections import deque, defaultdict
+from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from queue import Queue as ThQueue, Empty
 from pynput.keyboard import Listener as KeyboardListener, Key, KeyCode
@@ -4375,6 +4375,19 @@ if __name__ == "__main__":
         log_message("error", f"🤖❌ Redis connection failed  {e}")
         raise SystemExit(1)
     
+    backend_proc = None
+
+    try:
+        backend_proc = subprocess.Popen(
+            ["./backend.sh"],
+            cwd=os.path.dirname(__file__)
+        )
+        # Give backend a moment to start
+        time.sleep(1)
+    except Exception as e:
+        log_message("error", f"❌ Failed to start backend: {e}")
+        raise SystemExit(1)
+    
     stop_event = threading.Event()
     spin_in_progress = threading.Event()
     bet_in_progress = threading.Event()
@@ -4510,13 +4523,6 @@ if __name__ == "__main__":
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     finally:
         stop_event.set()
-        
-        # alert_queue.join()
-        # alert_thread.join()
-        # timer_thread.join()
-        # log_thread.join()
-        
-        # stop_event.set()
 
         # 1️⃣ Stop queue workers
         alert_queue.put(None)
@@ -4536,20 +4542,12 @@ if __name__ == "__main__":
         except Exception:
             pass
         
-        # for t in threads:
-        #     t.join()
-            
-        # r.delete("game")
-        # r.delete("provider")
-        # r.delete("url")
-        # r.delete("api_server")
-        # r.delete("game_data")
-        # r.delete("api_data")
-        # r.close()
-        
         log_message("warning", f"\n\n\t🤖❌  {colors.get('LYEL')}All threads shut down...{colors.get('RES')}")
-        
-        # stop_event.set()
-        # alert_queue.join()
-        # bet_queue.join()
-        
+
+        # Stop backend
+        if backend_proc is not None:
+            backend_proc.terminate()
+            try:
+                backend_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                backend_proc.kill()
