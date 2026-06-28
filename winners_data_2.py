@@ -171,8 +171,8 @@ def fetch_winners_data(driver: webdriver.Chrome):
                 winners_data = {
                     "itemName": player,
                     "gameName": game.title(),
-                    "betAmount": float(bet), 
-                    "betMul": str(float(amount)/float(bet)),
+                    "betAmount": float(bet),
+                    "betMul": str(float(amount)/float(bet)) if bet != "0.00" else "0.00",
                     "payOut": float(amount)
                 }
                 r.set("winners_data", json.dumps(winners_data))

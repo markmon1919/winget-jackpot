@@ -3938,16 +3938,14 @@ def fetch_winners_data():
 
             winners_data = json.loads(winners_data_raw)
             data_hash = hashlib.md5(winners_data_raw.encode()).hexdigest()
-            winners_data = json.loads(winners_data_raw)
 
             if state.last_winners_hash != data_hash: 
                 state.last_winners_hash = data_hash
-                winners_data['volume_hit'] = float(state.api_vol)
                 if (
                     not winners_data.get("gameId")
-                    and "Super Ace 2" in winners_data.get("gameName", "")
-                ):
-                    winners_data["gameName"] = winners_data["gameName"].replace(" 2", " II")
+                    and any(x in winners_data.get("gameName") for x in ("Baccarat", "Tongits", "Crazy Time", "Blackjack", "Roulette", "Live"))
+                ): continue
+                winners_data['volume_hit'] = float(state.api_vol)
             else: continue
 
             timestamp = winners_data.get("createTime") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -3957,26 +3955,46 @@ def fetch_winners_data():
                 if winners_data.get("gameId")
                 else winners_data.get("gameName")
             )
+            
+            if not winners_data.get("gameId"):
+                replacements = {
+                    "Super Ace 2": "Super Ace II",
+                    "'S": "'s"
+                }
+                for old, new in replacements.items():
+                    game_name = game_name.replace(old, new)
 
             winner_game = db["GAME"].find_one(
                 {"name": game_name},
                 {"config.slot_size": 1, "_id": 0, "provider": 1}
             ) or {}
 
-            winner_is_slot = (
-                winner_game.get("config", {}).get("slot_size")
-                if winner_game else None if game_name.__contains__("Baccarat")
-                else "UNKNOWN"
-            )
+            # winner_is_slot = (
+            #     winner_game.get("config", {}).get("slot_size")
+            #     if winner_game else None if game_name.__contains__("Baccarat")
+            #     else "UNKNOWN"
+            # )
 
             # Skip if one is a slot and the other isn't
-            if (winner_is_slot is not None) != (state.slot_size is not None): continue
+            # if (winner_is_slot is not None) != (state.slot_size is not None): continue
+
+            similars = {
+                "Fortune Garuda Gems": "Fortune Gems",
+                "Lucky Jaguar 500": "Lucky Jaguar",
+                "Lucky Jaguar 2": "Lucky Jaguar",
+                "Lucky Penny 2": "Lucky Penny"
+            }
+
+            same_game = game_name
+
+            for old, new in similars.items():
+                same_game = same_game.replace(old, new)
 
             # is_current_game = True if "OMNI" in provider.get("initial") and winner_game.get("config", {}).get("provider") else game_name.lower() == game["name"].lower()
             is_current_game = (
                 winner_game.get("provider", "UNKNOWN") == provider.get("initial")
                 if "OMNI" in provider.get("initial", "")
-                else game_name.lower() == game["name"].lower()
+                else same_game.lower() == game["name"].lower()
             )
             
             colored_ago = f"{colors['CYN'] if (is_current_game) else colors['DGRY']}⏱ {time_ago(timestamp) if (is_current_game) else timestamp}{colors['RES']}"
@@ -4033,7 +4051,7 @@ def fetch_winners_data():
                 both_colors_alerted = False
                         
             log_message("info", "".join(message), overwrite=True, _overlay_key="winners_data")
-            stop_event.wait(0.2)
+            stop_event.wait(0.5)
         except Exception as e:
             log_message("error", f"[fetch_winners_data] {game_name} {e}", overwrite=True, _overlay_key="winners_data")
             time.sleep(0.2)

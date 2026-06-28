@@ -18,6 +18,7 @@ GAME_CONFIGS = {
     "3 LUCKY LION": GameConfig(0, "small", False, True, True, None, False, True, "JILI"),
     "3 Lucky Piggy": GameConfig(0, "small", False, True, True, None, False, True, "JILI"),
     "3 Pot Dragons": GameConfig(0, "small", False, True, True, None, False, True, "JILI"),
+    "3 Super Ace": GameConfig(0, "small", False, True, True, None, False, False, "JILI"),
     "3 Witch's Lamp": GameConfig(0, "small", False, True, True, None, False, True, "JILI"),
     "40 Sparkling Crown": GameConfig(0, "small", False, True, True, None, False, True, "JILI"),
     "7up7down": GameConfig(0, "small", False, True, True, None, False, True, "JILI"),
