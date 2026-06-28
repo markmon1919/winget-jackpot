@@ -3942,7 +3942,12 @@ def fetch_winners_data():
 
             if state.last_winners_hash != data_hash: 
                 state.last_winners_hash = data_hash
-                winners_data['volume_hit'] = float(state.api_vol)                
+                winners_data['volume_hit'] = float(state.api_vol)
+                if (
+                    not winners_data.get("gameId")
+                    and "Super Ace 2" in winners_data.get("gameName", "")
+                ):
+                    winners_data["gameName"] = winners_data["gameName"].replace(" 2", " II")
             else: continue
 
             timestamp = winners_data.get("createTime") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -3975,7 +3980,15 @@ def fetch_winners_data():
             )
             
             colored_ago = f"{colors['CYN'] if (is_current_game) else colors['DGRY']}⏱ {time_ago(timestamp) if (is_current_game) else timestamp}{colors['RES']}"
-            colored_game = f"{colors['BLRED']}{game_name}{colors['RES']}" if (is_current_game and winners_data.get("gameId")) else f"{colors['BLYEL']}{game_name}{colors['RES']}" if (is_current_game and not winners_data.get("gameId")) else f"{colors['WHTE']}{game_name}{colors['RES']}"
+            colored_game = (
+                f"{colors['BLRED']}{game_name}{colors['RES']}" 
+                if (is_current_game and winners_data.get("gameId")) 
+                else f"{colors['BLYEL']}{game_name}{colors['RES']}" 
+                if (is_current_game and not winners_data.get("gameId"))
+                else f"{colors['RED']}{game_name}{colors['RES']}"
+                if (not is_current_game and winners_data.get("gameId")) 
+                else f"{colors['YEL']}{game_name}{colors['RES']}"
+            )
             
             bet = winners_data.get("betAmount")
             multiplier = winners_data.get("betMul")
@@ -4550,4 +4563,8 @@ if __name__ == "__main__":
             try:
                 backend_proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                backend_proc.kill()
+                subprocess.run(
+                    ["./killall.sh"],
+                    cwd=os.path.dirname(__file__),
+                    check=False)
+            
