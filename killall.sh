@@ -10,7 +10,7 @@ if [[ -f "$PIDFILE" ]]; then
     pid=$(cat "$PIDFILE")
 
     if kill -0 "$pid" 2>/dev/null; then
-        echo "Stopping backend supervisor ($pid)..."
+        echo -e "\n\n\tStopping backend supervisor ($pid)..."
 
         kill -TERM "$pid"
 
@@ -24,7 +24,7 @@ if [[ -f "$PIDFILE" ]]; then
 
         # Still alive? Force kill.
         if kill -0 "$pid" 2>/dev/null; then
-            echo "Force killing supervisor..."
+            echo -e "\n\n\tForce killing supervisor..."
             kill -9 "$pid" 2>/dev/null || true
         fi
     fi
@@ -49,4 +49,4 @@ pkill -f "rtp_data.py" 2>/dev/null || true
 pkill -f "winners_data.py" 2>/dev/null || true
 pkill -f "winners_data_2.py" 2>/dev/null || true
 
-echo "✅ Backend stopped."
+echo -e "\n\n\t✅  Backend killed."

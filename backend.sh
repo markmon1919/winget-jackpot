@@ -24,7 +24,7 @@ cleanup() {
     (( CLEANED_UP )) && return
     CLEANED_UP=1
 
-    echo "🛑 Stopping services..."
+    echo -e "\n\n\t🛑  Stopping services..."
 
     rm -f "$PIDFILE"
 
@@ -69,7 +69,7 @@ cleanup() {
 
     wait 2>/dev/null || true
 
-    echo "✅ Backend stopped."
+    echo -e "\n\n\t✅  Backend stopped."
 }
 
 trap cleanup EXIT INT TERM
@@ -102,6 +102,6 @@ wait -n
 status=$?
 set -e
 
-echo "A child process exited."
+# echo -e "\n\n\tA child process exited."
 
 exit "$status"

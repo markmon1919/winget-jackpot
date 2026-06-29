@@ -4158,7 +4158,7 @@ def start_listeners(stop_event):
 def on_key_press(key):
     if key == Key.esc:
         state.running = False
-        os._exit(0)
+        shutdown()
         
     if key == Key.right:
         bet_inc = [
@@ -4608,6 +4608,34 @@ if __name__ == "__main__":
     
     for t in threads:
         t.start()
+
+    def shutdown():
+        stop_event.set()
+        # Stop queue workers
+        alert_queue.put(None)
+        # Cleanup Redis
+        try:
+            r.delete("game", "provider", "game_data", redis_key)
+            # r.delete("game", "provider", "url", "api_server", "game_data", "hs_data", "api_data", "rtp_data", "winners_data")
+            r.close()
+        except Exception:
+            pass
+        # Stop backend
+        if backend_proc is not None:
+            backend_proc.terminate()
+            try:
+                backend_proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                subprocess.run(
+                    ["./killall.sh"],
+                    cwd=os.path.dirname(__file__),
+                    check=False)
+        # Join NON-daemon workers only
+        for t in (alert_thread, timer_thread, log_thread):
+            t.join(timeout=3)
+
+        for t in threads:
+            if t.is_alive(): t.join(timeout=3)
         
     try:
         next_run = time.monotonic()
@@ -4626,36 +4654,5 @@ if __name__ == "__main__":
         stop_event.set()
         log_message("error", f"\n\n\t🤖❌  {colors.get('BLRED')}Main program interrupted.{colors.get('RES')}")
     finally:
-        stop_event.set()
-
-        # 1️⃣ Stop queue workers
-        alert_queue.put(None)
-
-        # 2️⃣ Join NON-daemon workers only
-        for t in (alert_thread, timer_thread, log_thread):
-            t.join(timeout=3)
-
-        for t in threads:
-            if t.is_alive(): t.join(timeout=3)
-
-        # 3️⃣ Cleanup Redis
-        try:
-            r.delete("game", "provider", "game_data", redis_key)
-            # r.delete("game", "provider", "url", "api_server", "game_data", "hs_data", "api_data", "rtp_data", "winners_data")
-            r.close()
-        except Exception:
-            pass
-        
+        shutdown()
         log_message("warning", f"\n\n\t🤖❌  {colors.get('LYEL')}All threads shut down...{colors.get('RES')}")
-
-        # Stop backend
-        if backend_proc is not None:
-            backend_proc.terminate()
-            try:
-                backend_proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                subprocess.run(
-                    ["./killall.sh"],
-                    cwd=os.path.dirname(__file__),
-                    check=False)
-            
