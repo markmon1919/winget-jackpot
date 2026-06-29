@@ -3926,7 +3926,7 @@ def fetch_rtp_data():
 def fetch_winners_data():
     state.hit_win = False
     winners_len = 30 if provider.get("initial") == "OMNI" else 12
-    message = deque(maxlen=winners_len)
+    winners_obj = deque(maxlen=winners_len)
     both_colors_alerted = False 
 
     while not stop_event.is_set():
@@ -4036,16 +4036,66 @@ def fetch_winners_data():
             )
 
             colored_vol_hit = f"{colors['RES']}| {colors['WHTE']}Vol Hit{colors['RES']}: {colored_api_volume}" if (is_current_game) else f"{colors['RES']}"
-                    
-            message.append(
-                f"\n\t[ {colored_game} ]{colors['WHTE']} - {colored_bet} {colored_multiplier} {colors['WHTE']}= {colored_payout} {colored_ago}"
-                f"{f' {colored_vol_hit}'}"
-            )
 
-            joined = "".join(message)
+            winners_obj.append({
+                "timestamp": timestamp,
+                "game_name": game_name,
+                "is_current_game": is_current_game,
+                "has_game_id": bool(winners_data.get("gameId")),
+                "colored_bet": colored_bet,
+                "colored_multiplier": colored_multiplier,
+                "colored_payout": colored_payout,
+                "volume_hit": winners_data.get("volume_hit"),
+            })
 
-            has_red = colors["BLRED"] in joined
-            has_yellow = colors["BLYEL"] in joined
+            rendered = []
+
+            for item in winners_obj:
+                colored_ago = (
+                    f"{colors['CYN']}⏱ {time_ago(item['timestamp'])}{colors['RES']}"
+                    if item["is_current_game"]
+                    else f"{colors['DGRY']}⏱ {item['timestamp']}{colors['RES']}"
+                )
+
+                colored_game = (
+                    f"{colors['BLRED']}{item['game_name']}{colors['RES']}"
+                    if item["is_current_game"] and item["has_game_id"]
+                    else f"{colors['BLYEL']}{item['game_name']}{colors['RES']}"
+                    if item["is_current_game"]
+                    else f"{colors['RED']}{item['game_name']}{colors['RES']}"
+                    if item["has_game_id"]
+                    else f"{colors['YEL']}{item['game_name']}{colors['RES']}"
+                )
+
+                colored_api_volume = (
+                    f"{colors['BLMAG'] if item['volume_hit'] >= 200 else
+                    colors['BLRED'] if item['volume_hit'] >= 150 else
+                    colors['ORA'] if item['volume_hit'] >= 120 else
+                    colors['BLYEL'] if item['volume_hit'] >= 90 else
+                    colors['BLCYN'] if item['volume_hit'] >= 50 else
+                    colors['BLGRE'] if item['volume_hit'] >= 10 else
+                    colors['DGRY']}"
+                    f"{item['volume_hit']:.2f}{colors['RES']}"
+                )
+
+                colored_vol_hit = (
+                    f"{colors['RES']}| {colors['WHTE']}Vol Hit{colors['RES']}: {colored_api_volume}"
+                    if item["is_current_game"]
+                    else ""
+                )
+
+                rendered.append(
+                    f"\n\t[ {colored_game} ]{colors['WHTE']} - "
+                    f"{item['colored_bet']} {item['colored_multiplier']} "
+                    f"{colors['WHTE']}= {item['colored_payout']} "
+                    f"{colored_ago} {colored_vol_hit}"
+                )
+
+            
+            message = "".join(rendered)
+
+            has_red = colors["BLRED"] in message
+            has_yellow = colors["BLYEL"] in message
 
             if has_red and has_yellow:
                 if not both_colors_alerted:
@@ -4053,8 +4103,27 @@ def fetch_winners_data():
                     alert_queue.put("trending")
             else:
                 both_colors_alerted = False
+
+            log_message("info", message, overwrite=True, _overlay_key="winners_data")
+                    
+            # message.append(
+            #     f"\n\t[ {colored_game} ]{colors['WHTE']} - {colored_bet} {colored_multiplier} {colors['WHTE']}= {colored_payout} {colored_ago}"
+            #     f"{f' {colored_vol_hit}'}"
+            # )
+
+            # joined = "".join(message)
+
+            # has_red = colors["BLRED"] in joined
+            # has_yellow = colors["BLYEL"] in joined
+
+            # if has_red and has_yellow:
+            #     if not both_colors_alerted:
+            #         both_colors_alerted = True
+            #         alert_queue.put("trending")
+            # else:
+            #     both_colors_alerted = False
                         
-            log_message("info", "".join(message), overwrite=True, _overlay_key="winners_data")
+            # log_message("info", "".join(message), overwrite=True, _overlay_key="winners_data")
             stop_event.wait(0.5)
         except Exception as e:
             log_message("error", f"[fetch_winners_data] {game_name} {e}", overwrite=True, _overlay_key="winners_data")
