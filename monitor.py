@@ -3943,7 +3943,7 @@ def fetch_winners_data():
                 state.last_winners_hash = data_hash
                 if (
                     not winners_data.get("gameId")
-                    and any(x in winners_data.get("gameName") for x in ("Baccarat", "Tongits", "Crazy Time", "Blackjack", "Roulette", "Colour Game", "Live"))
+                    and any(x in winners_data.get("gameName") for x in ("Baccarat", "Tongits", "Crazy Time", "Blackjack", "Roulette", "Live"))
                 ): continue
                 winners_data['volume_hit'] = float(state.api_vol)
             else: continue
@@ -3959,10 +3959,12 @@ def fetch_winners_data():
             if not winners_data.get("gameId"):
                 replacements = {
                     "Super Ace 2": "Super Ace II",
-                    "'S": "'s"
+                    "Geisha'S Revenge": "Geisha's Revenge"
+                    # "'S": "'s"
                 }
-                for old, new in replacements.items():
-                    game_name = game_name.replace(old, new)
+                game_name = replacements.get(game_name, game_name)
+                # for old, new in replacements.items():
+                #     game_name = game_name.replace(old, new)
 
             winner_game = db["GAME"].find_one(
                 {"name": game_name},
@@ -3979,16 +3981,18 @@ def fetch_winners_data():
             # if (winner_is_slot is not None) != (state.slot_size is not None): continue
 
             similars = {
-                "Fortune Garuda Gems": "Fortune Gems",
+                "Fortune Garuda 500": "Fortune Gems",
                 "Lucky Jaguar 500": "Lucky Jaguar",
                 "Lucky Jaguar 2": "Lucky Jaguar",
                 "Lucky Penny 2": "Lucky Penny"
             }
 
-            same_game = game_name
+            # same_game = game_name
 
-            for old, new in similars.items():
-                same_game = same_game.replace(old, new)
+            same_game = similars.get(game_name, game_name)
+
+            # for old, new in similars.items():
+            #     same_game = same_game.replace(old, new)
 
             # is_current_game = True if "OMNI" in provider.get("initial") and winner_game.get("config", {}).get("provider") else game_name.lower() == game["name"].lower()
             is_current_game = (

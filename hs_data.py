@@ -1,7 +1,7 @@
 #!/usr/bin/env .venv/bin/python
 
 
-import json, os, platform, redis, shutil, time, threading
+import json, os, platform, redis, signal, shutil, time, threading
 from monitor import log_message
 # from decimal import Decimal
 from selenium import webdriver
@@ -137,6 +137,10 @@ def fetch_hs_data(driver: webdriver.Chrome, game: dict) -> list:
             r.set("game_data", json.dumps(game_data))
         except Exception as e:
             log_message("error", f"🤖❌  {e}")
+
+def shutdown(signum, frame):
+    log_message("warning", f"Received signal {signum}, shutting down...")
+    stop_event.set()
             
 
 if __name__ == "__main__":        
@@ -165,8 +169,18 @@ if __name__ == "__main__":
             time.sleep(0.5)
             
     stop_event = threading.Event()
+
+    signal.signal(signal.SIGTERM, shutdown)
+    signal.signal(signal.SIGINT, shutdown)
     
     driver = setup_driver()
+    chromedriver_pid = None
+
+    try:
+        chromedriver_pid = driver.service.process.pid
+    except Exception:
+        pass
+
     driver.set_page_load_timeout(30)
     driver.implicitly_wait(2)
     
@@ -212,11 +226,34 @@ if __name__ == "__main__":
 
         if fetch_thread.is_alive(): fetch_thread.join(timeout=3)
 
-        driver.quit()
+        try:
+            driver.quit()
+            log_message("info", "✅ driver.quit() completed")
+        except Exception as e:
+            log_message("error", f"driver.quit() failed: {e}")
+
+        # Kill ChromeDriver if still alive
+        if chromedriver_pid:
+            try:
+                os.kill(chromedriver_pid, signal.SIGTERM)
+                time.sleep(1)
+
+                try:
+                    os.kill(chromedriver_pid, 0)
+                    log_message("warning", "Force killing ChromeDriver...")
+                    os.kill(chromedriver_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+            except ProcessLookupError:
+                pass
+            except Exception as e:
+                log_message("error", f"Failed to kill ChromeDriver: {e}")
 
         try:
             r.delete("game_data")
             r.close()
         except Exception:
             pass
-        
+
+        log_message("info", "✅ Shutdown complete.")
