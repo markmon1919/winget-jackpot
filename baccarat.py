@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/env .venv/bin/python
+
 
 import cv2, os, mss, pyautogui, re, threading, time
 import numpy as np
