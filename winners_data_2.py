@@ -176,7 +176,7 @@ def fetch_winners_data(driver: webdriver.Chrome):
                     "payOut": float(amount)
                 }
                 r.set("winners_data", json.dumps(winners_data))
-                # log_message("info", f"🏆 {winners_data}")
+                log_message("info", f"🏆 {winners_data}")
 
         except Exception as e:
             log_message("error", f"🤖❌  {e}")
