@@ -143,11 +143,17 @@ class AutoState:
     hit_win: bool = False
     api_vol: float = 0.0
     api_vol_signal: str = None
+    api_vol_delta: str = None
     # api_vol_static: float = 0.0
     rtp: bool = True
     rtp_val: float = 0.0
     last_rtp: bool = None
-
+    total_bet: float = 0.0
+    last_total_bet: float = 0.0
+    multiplier: str = None
+    both_colors_alerted: bool = False
+    red_alerted: bool = False
+    yellow_alerted: bool = False
     last_users: dict = field(default_factory=dict)
     last_rtp_hash: str = None
     last_winners_hash: str = None
@@ -427,11 +433,19 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
 
     cx, cy, by = CENTER_X, CENTER_Y, BTM_Y
 
-    spin_types = [ "normal_spin", "spin_hold", "board_spin", "board_spin_hold", "board_spin_turbo", "spin_slide", "auto_spin", "turbo_spin", "super_turbo", "spam_spin" ]
+    spin_types = [ "normal_spin", "trick_spin", "spin_hold", "board_spin", "board_spin_hold", "board_spin_turbo", "spin_slide", "auto_spin", "turbo_spin", "super_turbo", "spam_spin" ]
     
     spin_type = None
 
     try:
+        rand_x = cx - random.randint(-radius_x, radius_x)
+        rand_y = random.randint(y_start, y_end)
+        # mystic = 100
+        # cruise_royal = 100
+        # queen of bounty = cy
+
+        rand_x2 = cx - random.randint(-radius_x, radius_x)
+        rand_y2 = random.randint(y_start, y_end)
         # cmd, combo_spin = spin_queue.get_nowait()
         # spin_in_progress, combo_spin = spin_queue.get(timeout=1)
         if not wheel_mode and not quick_spin:
@@ -460,9 +474,16 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
 
                     if state.fast_mode:
                         # if random.random() < 0.8:
-                        spin_type = "board_spin" if random.random() < 0.4 else "normal_spin"
+                        # spin_type = "board_spin" if random.random() < 0.4 else "normal_spin"
+                        spin_type = (
+                            "normal_spin"
+                            if random.random() < 0.5
+                            else random.choice(["trick_spin", "board_spin"])
+                        )
                         # if random.random() < 0.4:
-                        #     spin_type = "board_spin"
+                            # spin_type = "board_spin"
+                        # if random.random() < 0.8:
+                        #     spin_type = "trick_spin"
                     else:
                         spin_types = [s for s in spin_types if any(x in s for x in ("turbo", "spam", "auto", "board"))]
 
@@ -476,11 +497,11 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                     if random.random() < 0.4:
                         spin_types = [s for s in spin_types if any(x in s for x in ("turbo", "spam", "auto"))]
                     else:
-                        spin_types = [s for s in spin_types if not any(x in s for x in ("turbo", "spam"))]
+                        spin_types = [s for s in spin_types if not any(x in s for x in ("trick", "turbo", "spam"))]
 
                     if not scatter_mode:
-                        # if state.fast_mode and random.random() < 0.7:
-                        #     spin_types = [ "normal_spin" ]
+                        if state.fast_mode and random.random() < 0.7:
+                            spin_types = [ "trick_spin", "normal_spin" ]
 
                         if state.hs_jackpot < 5 and random.random() < 0.7:
                             spin_type = "scatter_spin"
@@ -528,16 +549,47 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                     ])
                 else:
                     if game.get("name", "").__contains__("Super Ace"):
-                        by -= 80
+                        by -= 10
                     reset_action.extend([
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
-                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        # TEMPORARY TEST MANUAL
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
+
+                        
+
+
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        # lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right'), pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
                         
 
 
@@ -549,7 +601,8 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                     ])
 
                 random.choice(reset_action)()
-                time.sleep(1)
+                # time.sleep(1)
+                return # temp for manual
         
         spin_type = "wheel_spin" if wheel_mode else "scatter_spin" if scatter_mode else spin_type if spin_type is not None else random.choice(spin_types)
 
@@ -574,14 +627,14 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
         # ):
         #     y_start *= 2
                 
-        rand_x = cx - random.randint(-radius_x, radius_x)
-        rand_y = random.randint(y_start, y_end)
-        # mystic = 100
-        # cruise_royal = 100
-        # queen of bounty = cy
+        # rand_x = cx - random.randint(-radius_x, radius_x)
+        # rand_y = random.randint(y_start, y_end)
+        # # mystic = 100
+        # # cruise_royal = 100
+        # # queen of bounty = cy
 
-        rand_x2 = cx - random.randint(-radius_x, radius_x)
-        rand_y2 = random.randint(y_start, y_end)
+        # rand_x2 = cx - random.randint(-radius_x, radius_x)
+        # rand_y2 = random.randint(y_start, y_end)
 
         # print(f'\theight >>> {height}')
         # print(f'\tBTM_Y >>> {BTM_Y}')
@@ -623,7 +676,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                     ])
                 else:
                     if game.get("name", "").__contains__("Super Ace"):
-                        by -= 80
+                        by -= 10
                     # NO RIGHT CLICK FOR BUTTON IN PG (BUT MOUSEDOWN IS GOOD)
                     action.extend([
                         lambda: pyautogui.click(x=cx, y=by - 100, button='left'),
@@ -638,6 +691,60 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                         lambda: pyautogui.click(x=cx, y=by - 100, button='right'),
                         # lambda: (pyautogui.mouseDown(x=cx, y=by - 100, button='left'), pyautogui.mouseUp(button='left')),
                         # lambda: (pyautogui.mouseDown(x=cx, y=by - 100, button='right'), pyautogui.mouseUp(button='right'))
+                    ])
+        elif spin_type == "trick_spin":
+                if state.widescreen:
+                    if provider.get("initial") == "JILI": # Playtime
+                        cx += 30
+                        cy += 40
+                    action.extend([
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='left'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='left'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='right'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='right'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='left'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='left'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='right'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right'), pyautogui.doubleClick(x=cx + 380, y=cy + 325, button='right'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 240, y=cy + 325, button='right'))
+                    ])
+                    action.extend([
+                        lambda: pyautogui.click(x=cx + 520, y=cy + 335, button='left'),
+                        lambda: pyautogui.click(x=cx + 520, y=cy + 335, button='right'),
+                        # lambda: pyautogui.press('space'),
+                        # lambda: (pyautogui.keyDown('space'), pyautogui.keyUp('space')),
+                        # lambda: (pyautogui.mouseDown(x=cx + 520, y=cy + 335, button='left'), pyautogui.mouseUp(button='left')),
+                        # lambda: (pyautogui.mouseDown(x=cx + 520, y=cy + 335, button='right'), pyautogui.mouseUp(button='right'))
+                    ])
+                else:
+                    if game.get("name", "").__contains__("Super Ace"):
+                        by -= 10
+                    action.extend([
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=rand_x, y=rand_y, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
+
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='left'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='left')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
+                        lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right', interval=0), pyautogui.click(x=cx + 95, y=by - 100, button='right'), pyautogui.click(x=cx + 152, y=by - 100, button='right'), pyautogui.click(x=cx + 95, y=by - 100, button='right')),
                     ])
         elif spin_type == "spin_hold":
             if state.widescreen:
@@ -661,7 +768,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                 ])
             else:
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     lambda: (pyautogui.click(x=cx, y=by - 100, button='left'), time.sleep(random.uniform(0.05, 0.12)), pyautogui.mouseDown(button='left')),
                     lambda: (pyautogui.click(x=cx, y=by - 100, button='left'), time.sleep(random.uniform(0.05, 0.12)), pyautogui.mouseDown(button='right')),
@@ -929,7 +1036,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                 ])
             else:
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     lambda: pyautogui.click(x=rand_x, y=rand_y, button='left'),
                     lambda: pyautogui.click(x=rand_x, y=rand_y, button='right'),
@@ -956,7 +1063,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                 ])
             else:
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     lambda: (pyautogui.click(x=rand_x, y=rand_y, button='left'), time.sleep(random.uniform(0.05, 0.12)), pyautogui.mouseDown(button='left'), time.sleep(hold_delay), pyautogui.mouseUp(button='left')),
                     lambda: (pyautogui.click(x=rand_x, y=rand_y, button='left'), time.sleep(random.uniform(0.05, 0.12)), time.sleep(hold_delay), pyautogui.mouseDown(button='right')),
@@ -1165,7 +1272,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                 ])
             else:
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     # lambda: (pyautogui.press('space'), time.sleep(timeout_delay), pyautogui.mouseDown(x=rand_x, y=rand_y, button='left'), pyautogui.moveTo(x=rand_x2, y=rand_y2), pyautogui.mouseUp()),
                     # lambda: (pyautogui.press('space'), time.sleep(timeout_delay), pyautogui.mouseDown(x=rand_x, y=rand_y, button='right'), pyautogui.moveTo(x=rand_x2, y=rand_y2), pyautogui.mouseUp()),
@@ -1291,7 +1398,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                 ])
             else:
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     lambda: pyautogui.doubleClick(x=rand_x, y=rand_y, button='left'),
                     lambda: pyautogui.doubleClick(x=rand_x, y=rand_y, button='right'),
@@ -1422,7 +1529,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                     ])
                 else:
                     if game.get("name", "").__contains__("Super Ace"):
-                        by -= 80
+                        by -= 10
                     action.extend([
                         lambda: pyautogui.doubleClick(x=cx, y=by - 100, button='left'),
                         lambda: pyautogui.doubleClick(x=cx, y=by - 100, button='right'),
@@ -1535,7 +1642,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                     ])
                 else:
                     if game.get("name", "").__contains__("Super Ace"):
-                        by -= 80
+                        by -= 10
                     action.extend([
                         lambda: (pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.press('space'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left')),
                         # lambda: (pyautogui.click(x=cx + 152, y=by - 100, button='left'), pyautogui.press('space'), time.sleep(0.5), pyautogui.doubleClick(x=cx + 152, y=by - 100, button='right')),
@@ -1621,7 +1728,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                 ])
             else:
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.press('space'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='left')),
                     lambda: (pyautogui.doubleClick(x=cx + 152, y=by - 100, button='left'), pyautogui.press('space'), time.sleep(0.5), pyautogui.click(x=cx + 152, y=by - 100, button='right')),
@@ -1680,7 +1787,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                     ])
                 else:
                     if game.get("name", "").__contains__("Super Ace"):
-                        by -= 80
+                        by -= 10
                     action.extend([
                         lambda: pyautogui.doubleClick(x=cx + 95, y=by - 100, button='left'),
                         lambda: pyautogui.doubleClick(x=cx + 95, y=by - 100, button='right'),
@@ -1748,7 +1855,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                 ])
             else:
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     lambda: [ pyautogui.typewrite(['space'] * 6, interval=execution_time) for _ in range(3) ],
                     lambda: [ pyautogui.click(x=rand_x, y=rand_y, clicks=6, interval=execution_time, button="left") for _ in range(3) ],
@@ -2073,7 +2180,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
                         # lambda: (pyautogui.press('space'), pyautogui.mouseDown(x=cx, y=by - 100, button='right'), time.sleep(10 - (timer().timestamp() % 10)), pyautogui.mouseUp(button='right'))
                     ]) 
                 if game.get("name", "").__contains__("Super Ace"):
-                    by -= 80
+                    by -= 10
                 action.extend([
                     lambda: pyautogui.click(x=cx, y=by - 100, button='left'),
                     # lambda: pyautogui.click(x=cx, y=by - 100, button='right'),
@@ -2276,7 +2383,7 @@ def spin(combo_spin: bool = False, scatter_mode: bool = False, turbo_spin: bool 
         if scatter_spin: state.scatter_spin = False
         if wheel_mode: state.wheel_mode = False
         if quick_spin: state.quick_spin = False
-        if not state.auto_mode: alert_queue.put(f"{spin_type}")
+        # if not state.auto_mode: alert_queue.put(f"{spin_type}")
       
 def play_alert(say: str = None):
     voices_env = os.getenv("VOICES", "")
@@ -2301,7 +2408,7 @@ def play_alert(say: str = None):
                             # all([state.min10 >= state.min10_thresh, state.pull_delta >= state.pull_thresh])
                             # or "pull_score_spin" in sound_file
                             # or "bet max" in sound_file
-                            "pull_score_spin" in sound_file or "bet max" in sound_file or any(keyword in sound_file for keyword in ["DRAIN", "LOADED"])
+                            "pull_score_spin" in sound_file or "bet max" in sound_file or any(keyword in sound_file for keyword in ["DRAIN", "o'clock", "win", "trending"])
                         ) else VOICES["Samantha"]
                         
                         subprocess.run(["say", "-v", voice, "--", sound_file])
@@ -2459,6 +2566,13 @@ def str_to_float(s):
     # Keep digits and decimal points only
     cleaned = re.sub(r"[^\d.]", "", s)
     return float(cleaned) if cleaned else 0.0
+
+def dynamic_round(num):
+    if num >= 10_000:
+        return (num // 1_000) * 1_000
+    elif num >= 1_000:
+        return (num // 100) * 100
+    return num
 
 def banner(game: dict, providers: dict):
     while not stop_event.is_set():
@@ -2697,6 +2811,7 @@ def fetch_api_data():
     hot_start = None
     hot_seconds = 0.0
     # bet_lvl = "Don't Bet"
+    trigger = False
     
     while not stop_event.is_set():
         try:
@@ -2775,6 +2890,7 @@ def fetch_api_data():
             # 2️⃣ VOLATILITY MEASURES
             # =========================
             api_vol = abs(delta_10m) + abs(delta_shift_10m)
+            state.api_vol = api_vol
             api_vol_delta = round(api_vol - prev_api_vol, 2) if prev_api_vol is not None else 0.0
             prev_api_vol = 0.0 if prev_api_vol is None else last_api_vol if (api_vol != last_api_vol) else prev_api_vol
             prev_api_vol_delta = 0.0 if prev_api_vol_delta is None else last_api_vol_delta if (api_vol_delta != last_api_vol_delta) else prev_api_vol_delta
@@ -3175,25 +3291,38 @@ def fetch_api_data():
                 state.fast_mode = True
 
                 trigger = ((
+                        # state.red_alerted,
+                        # state.yellow_alerted,
+                        # state.both_colors_alerted,
                     state.rtp and any([
-                        session_mode in ["HOT", "DRAIN"] and direction in ["bullish", "reversal"],
+                        session_mode in ["HOT", "DRAIN"] and any([new_signal == "up", direction in ["bullish", "reversal"]]),
                         # session_mode == "DRAIN" and any([drain_seconds <= 1, hot_seconds > 0.0]),
                         # session_mode not in ["HOT", "DRAIN"] and hot_seconds >= 0.0,
                         # drain_seconds <= 2 or 0.0 < hot_seconds <= 7,
-                        state.api_jackpot >= 99.66 and volatility_score > prev_volatility and direction in ["bullish", "reversal"],
+                        state.api_jackpot >= 99.66 and volatility_score > prev_volatility and any([new_signal == "up", direction in ["bullish", "reversal"]]),
                         api_vol_delta >= 120,
-                        api_vol >= 200 and direction in ["bullish", "reversal"]
-                        # abs(api_vol_delta) >= 100 or api_vol >= 200 or explosion
+                        api_vol >= 200 and any([new_signal == "up", direction in ["bullish", "reversal"]]),
+                        state.red_alerted,
+                        state.yellow_alerted,
+                        state.both_colors_alerted,
                     ]))
                 or (not state.rtp and any([
-                        session_mode in ["HOT", "DRAIN"] and direction in ["bearish", "reversal"],
+                        # session_mode in ["HOT", "DRAIN"] and direction in ["bearish", "reversal"],
+                        session_mode in ["HOT", "DRAIN"] and any([new_signal == "down", direction in ["bearish", "reversal"]]),
                         # drain_seconds <= 2 or 0.0 < hot_seconds <= 7,
-                        state.api_jackpot >= 99.66 and volatility_score > prev_volatility,
+                        state.api_jackpot >= 99.66 and volatility_score > prev_volatility and any([new_signal == "down", direction in ["bearish", "reversal"]]),
                         api_vol_delta <= -120,
-                        api_vol >= 200 and direction in ["bearish", "reversal"]
+                        api_vol >= 200 and any([new_signal == "down", direction in ["bearish", "reversal"]]),
                         # abs(api_vol_delta) >= 100 or api_vol >= 200
+                        state.red_alerted,
+                        state.yellow_alerted,
+                        state.both_colors_alerted,
                     ])
                 ))
+
+                # if trigger:
+                #     alert_queue.put(f"trigger")
+                #     already_alerted.add(trigger)
                 
                 # if state.auto_mode and not state.wheel_mode and not state.quick_spin:
                 if state.auto_mode and trigger and not state.wheel_mode and not state.quick_spin: #and abs(predicted_delta_10m) >= 100:
@@ -3201,9 +3330,10 @@ def fetch_api_data():
                     if state.last_spin is not None:
                         if not any(
                             spin_type in state.last_spin
-                            for spin_type in ("auto", "turbo", "scatter", "spin_hold", "spin_slide")
+                            for spin_type in ("trick", "auto", "turbo", "scatter", "spin_hold", "spin_slide")
                         ):
-                            threading.Thread(target=spin, args=(False, False, True, False, False,), daemon=False).start() # non-turbo spin section
+                            # threading.Thread(target=spin, args=(False, False, True, False, False, False,), daemon=False).start() # non-turbo spin section
+                            threading.Thread(target=spin, args=(False, False, False, False, False, False,), daemon=False).start()
                         # if not any([
                         #     state.last_spin.startswith("auto"), 
                         #     state.last_spin.__contains__("turbo"), 
@@ -3216,9 +3346,9 @@ def fetch_api_data():
                                 spin_type in state.last_spin
                                 for spin_type in ("normal", "spam", "board")
                             ) and all([
-                                random.random() < 0.1,
+                                # random.random() < 0.1,
                                 predicted_delta_10m > prev_predicted_delta,
-                                direction not in ["t r a p"],
+                                direction not in ["t r a p"] or state.red_alerted or state.yellow_alerted or state.both_colors_alerted,
                                 abs(api_vol_delta) >= 120 or api_vol >= 200 or explosion or session_mode in ["HOT", "DRAIN"] or direction in ["reversal"]
                             ]):
                                 # if state.slow_mode:
@@ -3258,7 +3388,7 @@ def fetch_api_data():
                             #     session_mode not in ["HOT", "DRAIN"] and hot_seconds >= 0.0,
                             #     state.api_jackpot >= 99 and volatility_score > prev_volatility
                             # ]):
-                            threading.Thread(target=spin, args=(False, False, False, False, False,), daemon=True).start() # turbo spin section
+                            threading.Thread(target=spin, args=(False, False, False, False, False, False,), daemon=True).start() # turbo spin section
                             # alert_queue.put(f"true")
                     else:
                         # threading.Thread(target=spin, args=(False, False, False, False, False,), daemon=True).start()
@@ -3423,6 +3553,8 @@ def fetch_api_data():
                     f"{colors['GRE']}⬆{colors['RES']}" if (api_vol > prev_api_vol) else
                     f"{colors['RED']}⬇{colors['RES']}" if (api_vol < prev_api_vol) else None
                 )
+
+            state.api_vol_signal = volume_signal
             
             colored_volume_sec = (
                     # f"{colors['BLGRE'] if math.floor(api_vol) > round(avg_volume_sec) else
@@ -3435,12 +3567,11 @@ def fetch_api_data():
             
             blinking_volume_signal = f"{BLINK}{volume_signal}"
 
-            # state.api_vol = f"{colored_api_volume}"
-            state.api_vol = api_vol
-            vol_buffer.append(ema_vol_sec)
+            if all([api_vol != last_api_vol, prev_api_vol != 0.0]): vol_buffer.append(api_vol)
             # if all([timer().minute % 1 == 0, timer().second == 0]):
             # if all([timer().second == 0, len(vol_buffer) >= 5, api_vol != prev_api_vol]):
-            if all([timer().second == 0, current_jackpot != last_jackpot_value, len(vol_buffer) >= 5]):
+            # if all([timer().second == 0, state.total_bet != last_jackpot_value, len(vol_buffer) >= 5]):
+            if all([state.total_bet != state.last_total_bet, state.total_bet != 0.0, len(vol_buffer) >= 10]):
                 rolling_avg_vol = round(sum(vol_buffer) / len(vol_buffer), 2)
                 lowest_vol = round(min(vol_buffer), 2)
                 highest_vol = round(max(vol_buffer), 2)
@@ -3497,6 +3628,8 @@ def fetch_api_data():
             )
             
             diff_delta_volume = f"{colors['WHTE']}({colors['LMAG']}Δ{colors['DGRY']}:{colored_delta_volume}{colors['WHTE']}) {colored_delta_volume_signal}"
+
+            state.api_vol_delta = diff_delta_volume
             
             # colored_volatility_sec = f"{colors['YEL'] if (avg_volatility_sec <= 10) else colors['ORA'] if (avg_volatility_sec >= 80 and avg_volatility_sec < 100) else colors['RED'] if (avg_volatility_sec >= 100) else colors['GRE']}{avg_volatility_sec:.2f}{colors['RES']}"
             # colored_volatility_sec = (
@@ -3692,21 +3825,65 @@ def fetch_api_data():
             # if current_jackpot != last_jackpot_value:
             # if all([api_vol != prev_api_vol, api_vol_delta != last_api_vol_delta]):
                 # state.api_vol_signal = new_signal
-
+                
             if all([state.rtp != state.last_rtp, state.rtp is not None]):
                 if state.last_rtp is not None:
                     alert_queue.put(f"rtp {'up 'if state.rtp else 'down'}")
                     already_alerted.add(state.rtp)
                 state.last_rtp = state.rtp
 
-            if all([current_jackpot != last_jackpot_value, api_vol_delta != last_api_vol_delta]):
-                if direction is not None:
-                    alert_queue.put("tink") if direction == "bullish" else alert_queue.put("ping") if direction == "bearish" else alert_queue.put("reversal") if direction == "reversal" else alert_queue.put("trap")
-                    already_alerted.add(new_signal)
+            if any([state.both_colors_alerted, state.red_alerted, state.yellow_alerted]):
+                if state.both_colors_alerted:
+                    alert_queue.put("trending")
+                else:
+                    alert_queue.put(f"win {state.multiplier} times")
+                already_alerted.add(state.multiplier)
+                state.multiplier = None
+                state.both_colors_alerted = False
+                state.red_alerted = False
+                state.yellow_alerted = False
 
-                if session_mode in ["HOT", "DRAIN", "LOADED"]:
+            if all([current_jackpot != last_jackpot_value, api_vol_delta != last_api_vol_delta]):
+                if new_signal == "up":
+                    alert_queue.put("tink")
+                else:
+                    alert_queue.put("ping")
+                already_alerted.add(new_signal)
+
+                if all([direction in ["t r a p", "reversal"], direction is not None]):
+                    if direction == "reversal":
+                        alert_queue.put("reversal")
+                    else:
+                        alert_queue.put("trap")
+
+                    already_alerted.add(direction)
+
+                # if direction is not None:
+                #     alert_queue.put("tink") if any([direction == "bullish", new_signal == "up" and direction not in ["t r a p"]]) else alert_queue.put("ping") if any([direction == "bearish", new_signal == "down" and direction not in ["t r a p"]]) else alert_queue.put("reversal") if direction == "reversal" else alert_queue.put("trap") if direction == "t r a p" else None
+                #     # alert_queue.put("up") if direction == "bullish" else alert_queue.put("down") if direction == "bearish" else alert_queue.put("reversal") if direction == "reversal" else alert_queue.put("trap")
+                #     already_alerted.add(new_signal)
+
+                if session_mode in ["HOT", "DRAIN"]:
                     alert_queue.put(session_mode)
                     already_alerted.add(session_mode)
+
+                if api_vol >= 200:
+                    alert_queue.put("high volume")
+                    already_alerted.add(api_vol)
+
+                if shock_state == "LOADED":
+                    alert_queue.put(shock_state)
+                    already_alerted.add(shock_state)
+
+                if all([state.total_bet != state.last_total_bet, state.total_bet != 0.0]):
+                    if state.last_total_bet != 0.0:
+                        alert_queue.put(f"total jackpot {'plus 'if state.total_bet > state.last_total_bet else 'minus'}{dynamic_round(abs(state.last_total_bet - state.total_bet)):,}")
+                        already_alerted.add(state.total_bet)
+                    state.last_total_bet = state.total_bet
+
+                if datetime.now().minute == 0 and datetime.now().second == 0:
+                    alert_queue.put(f"{datetime.now().hour % 12 or 12} o'clock")
+                    already_alerted.add("o'clock")
             
             last_delta_value = delta
             last_delta_10m_value = delta_10m
@@ -3789,7 +3966,7 @@ def fetch_rtp_data():
                     name = get_game_name(gid)
                     rtp = g.get("max") / 100
                     current_rtp = False if g.get("trend") == 0 else True
-                    total_bet = f"{colors['LYEL']}₱{colors['LMAG']}{round(g.get("betAmount") / 100):,}"
+                    total_bet = round(g.get("betAmount") / 100)
 
                     if not name:
                         log_message("error", f"Missing game name for gid={gid} {e}")
@@ -3805,25 +3982,32 @@ def fetch_rtp_data():
                 if gid not in rtp_history:
                     rtp_history[gid] = {
                         "last_rtp": None,
-                        "prev_rtp": 0.0
+                        "prev_rtp": 0.0,
+                        "last_total_bet": None,
+                        "prev_total_bet": 0.0,
                     }
 
                 hist = rtp_history[gid]
                 last_rtp = hist["last_rtp"]
                 prev_rtp = hist["prev_rtp"]
+                last_total_bet = hist['last_total_bet']
+                prev_total_bet = hist['prev_total_bet']
 
                 # only shift if changed
-                if last_rtp is not None and rtp != last_rtp:
-                    prev_rtp = last_rtp
+                if last_rtp is not None and rtp != last_rtp: prev_rtp = last_rtp
+                if last_total_bet is not None and total_bet != last_total_bet: prev_total_bet = last_total_bet
 
                 # update current values
                 hist["last_rtp"] = rtp
                 hist["prev_rtp"] = prev_rtp
+                hist['last_total_bet'] = total_bet
+                hist['prev_total_bet'] = prev_total_bet
 
                 # highlight selected game
                 if name.lower() == game["name"].lower():
                     # if title == "Hot":
                     state.rtp = current_rtp
+                    state.total_bet = total_bet
                     # state.rtp_val = rtp_val
 
                     if all([state.hit_win, state.session_mode == "HOT"]):
@@ -3831,37 +4015,40 @@ def fetch_rtp_data():
                     else:
                         name_display = f"{colors['BLYEL']}{name}{colors['RES']}"
                 else:
-                    name_display = f"{colors['ORA'] if rtp >= 100 else colors['DGRY']}{name}{colors['RES']}"
+                    name_display = f"{colors['YEL'] if rtp >= 100 else colors['DGRY']}{name}{colors['RES']}"
 
                 # if abs(rtp_val) >= 100:
                 active_condition_ids.add(gid)
 
-                if gid not in elapsed_tracker:
-                    elapsed_tracker[gid] = now
+                if gid not in elapsed_tracker: elapsed_tracker[gid] = now
 
-                elapsed = int(now - elapsed_tracker[gid])
-                mins, secs = divmod(elapsed, 60)
-                elapsed_str = f"{colors['BLU']}⏱ {colors['LGRE'] if current_rtp else colors['LRED']}{mins:02d}:{secs:02d}{colors['RES']}"
+                # elapsed = int(now - elapsed_tracker[gid])
+                # mins, secs = divmod(elapsed, 60)
+                # elapsed_str = f"{colors['BLU']}⏱ {colors['LGRE'] if current_rtp else colors['LRED']}{mins:02d}:{secs:02d}{colors['RES']}"
                 # else:
                 #     elapsed_str = None
 
                 blinking = colors['BLNK'] if (current_rtp and rtp >= 99) else ""
                 color = colors['RED'] if not current_rtp else colors['GRE']
                 direction = f"{blinking}{colors['LRED']}⬇{colors['RES']}" if not current_rtp else f"{blinking}{colors['LGRE']}⬆{colors['RES']}"
-                signal = f"{colors['LCYN']}◆{colors['RES']}" if prev_rtp is None else f"{colors['LRED']}▼{colors['RES']}" if rtp < prev_rtp else f"{colors['LGRE']}▲{colors['RES']}" if rtp > prev_rtp else f"{colors['LCYN']}◆{colors['RES']}"
+                signal = f"{colors['LCYN']}◆{colors['RES']}" if prev_rtp == 0 else f"{colors['LRED']}▼{colors['RES']}" if rtp < prev_rtp else f"{colors['LGRE']}▲{colors['RES']}" if rtp > prev_rtp else f"{colors['LCYN']}◆{colors['RES']}"
+                total_bet_signal = f"{colors['LCYN']}◆{colors['RES']}" if prev_total_bet == 0 else f"{colors['LRED']}▼{colors['RES']}" if total_bet < prev_total_bet else f"{colors['LGRE']}▲{colors['RES']}" if total_bet > prev_total_bet else f"{colors['LCYN']}◆{colors['RES']}"
+                total_bet_delta = f"{colors['CYN']}{prev_total_bet}{colors['RES']}" if prev_total_bet == 0 else f"{colors['RED']}{(total_bet - prev_total_bet):,}{colors['RES']}" if total_bet < prev_total_bet else f"{colors['GRE']}+{(total_bet - prev_total_bet):,}{colors['RES']}" if total_bet > prev_total_bet else f"{colors['CYN']}{(total_bet - prev_total_bet):,}{colors['RES']}"
 
                 rtp_display = f"{blinking}{direction} {color}{rtp:.2f} {colors['WHTE']}%{colors['RES']}"
+                total_bet_display = f"💰 {colors['LGRE']}₱{colors['RES']}{colors['ORA']}{total_bet:,}{colors['RES']}"
 
                 prev_color =  colors['RED'] if (not prev_rtp and prev_rtp != 0.0) else colors['GRE'] if (prev_rtp and prev_rtp != 0.0) else colors['CYN']
                 prev_direction = f"{colors['LRED']}⬇{colors['RES']}" if (not prev_rtp and prev_rtp != 0.0) else f"{colors['LGRE']}⬆{colors['RES']}" if (prev_rtp and prev_rtp != 0.0) else f"{colors['LCYN']}◉{colors['RES']}"
-                prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp} {colors['WHTE']}%{colors['LYEL']}) {elapsed_str}{colors['RES']}"
+                prev_rtp_display = f"{colors['YEL']}({prev_direction} {prev_color}{prev_rtp} {colors['WHTE']}%{colors['YEL']}){colors['RES']}"
+                prev_total_bet_display = f"{colors['WHTE']}({colors['LMAG']}Δ{colors['DGRY']}:{total_bet_delta}{colors['WHTE']}) {total_bet_signal}"
 
                 # if elapsed_str:
                 #     prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp_val} {colors['WHTE']}%{colors['LYEL']}) {colors['BLU']}⏱ {colors['ORA']}{elapsed_str}{colors['RES']}"
                 # else:
                 #     prev_rtp_display = f"{colors['LYEL']}({prev_direction} {prev_color}{prev_rtp_val} {colors['WHTE']}%{colors['LYEL']})"
 
-                return f"{colors['WHTE']}- {name_display} {rtp_display} {signal} {prev_rtp_display} {total_bet} {colors['RES']}"
+                return f"{colors['WHTE']}- {name_display} {rtp_display} {signal} {prev_rtp_display} {total_bet_display} {prev_total_bet_display}"
 
             # 🔥 HOT section = 2 columns
             # helper: strip ANSI for accurate width
@@ -3927,7 +4114,6 @@ def fetch_winners_data():
     state.hit_win = False
     winners_len = 30 if provider.get("initial") == "OMNI" else 12
     winners_obj = deque(maxlen=winners_len)
-    both_colors_alerted = False 
 
     while not stop_event.is_set():
         try:
@@ -3946,6 +4132,8 @@ def fetch_winners_data():
                     and any(x in winners_data.get("gameName") for x in ("Baccarat", "Tongits", "Crazy Time", "Blackjack", "Roulette", "Live"))
                 ): continue
                 winners_data['volume_hit'] = float(state.api_vol)
+                winners_data['signal_hit'] = state.api_vol_signal
+                winners_data['volume_delta'] = state.api_vol_delta
             else: continue
 
             timestamp = winners_data.get("createTime") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -3963,22 +4151,11 @@ def fetch_winners_data():
                     # "'S": "'s"
                 }
                 game_name = replacements.get(game_name, game_name)
-                # for old, new in replacements.items():
-                #     game_name = game_name.replace(old, new)
 
             winner_game = db["GAME"].find_one(
                 {"name": game_name},
                 {"config.slot_size": 1, "_id": 0, "provider": 1}
             ) or {}
-
-            # winner_is_slot = (
-            #     winner_game.get("config", {}).get("slot_size")
-            #     if winner_game else None if game_name.__contains__("Baccarat")
-            #     else "UNKNOWN"
-            # )
-
-            # Skip if one is a slot and the other isn't
-            # if (winner_is_slot is not None) != (state.slot_size is not None): continue
 
             similars = {
                 "Fortune Garuda 500": "Fortune Gems",
@@ -4001,7 +4178,7 @@ def fetch_winners_data():
                 else same_game.lower() == game["name"].lower()
             )
             
-            colored_ago = f"{colors['CYN'] if (is_current_game) else colors['DGRY']}⏱ {time_ago(timestamp) if (is_current_game) else timestamp}{colors['RES']}"
+            colored_ago = f"{colors['CYN'] if (is_current_game) else colors['DGRY']}⏱ {time_ago(timestamp) if (is_current_game) else timestamp.split(" ")[1]}{colors['RES']}"
             colored_game = (
                 f"{colors['BLRED']}{game_name}{colors['RES']}" 
                 if (is_current_game and winners_data.get("gameId")) 
@@ -4020,9 +4197,9 @@ def fetch_winners_data():
                 round(bet * str_to_float(multiplier), 2)
             )
             
-            colored_bet = f"{colors['LGRE'] if (is_current_game) else colors['DGRY']}₱{colors['BLCYN'] if (is_current_game) else colors['DGRY']}{round(bet) if bet.is_integer() else bet}{colors['RES']}"
-            colored_multiplier = f"{colors['LYEL'] if (is_current_game) else colors['DGRY']}x{colors['BLMAG'] if (is_current_game) else colors['DGRY']}{round(str_to_float(multiplier), 2)}{colors['RES']}"
-            colored_payout = f"{colors['LGRE'] if (is_current_game) else colors['DGRY']}₱{colors['ORA'] if (is_current_game) else colors['DGRY']}{payout:,.2f}{colors['RES']}"
+            colored_bet = f"{colors['LGRE'] if (is_current_game) else colors['GRE']}₱{colors['BLCYN'] if (is_current_game) else colors['CYN']}{round(bet) if bet.is_integer() else bet}{colors['RES']}"
+            colored_multiplier = f"{colors['LYEL'] if (is_current_game) else colors['YEL']}x{colors['BLMAG'] if (is_current_game) else colors['MAG']}{round(str_to_float(multiplier), 2)}{colors['RES']}"
+            colored_payout = f"{colors['LGRE'] if (is_current_game) else colors['GRE']}₱{colors['ORA'] if (is_current_game) else colors['YEL']}{payout:,.2f}{colors['RES']}"
 
             colored_api_volume = (
                 f"{colors['BLMAG'] if winners_data.get("volume_hit") >= 200 else
@@ -4035,7 +4212,7 @@ def fetch_winners_data():
                 f"{winners_data.get("volume_hit"):.2f}{colors['RES']}"
             )
 
-            colored_vol_hit = f"{colors['RES']}| {colors['WHTE']}Vol Hit{colors['RES']}: {colored_api_volume}" if (is_current_game) else f"{colors['RES']}"
+            colored_vol_hit = f"{colors['RES']}| 🧪 {colored_api_volume}" if (is_current_game) else f"{colors['RES']}"
 
             winners_obj.append({
                 "timestamp": timestamp,
@@ -4046,6 +4223,8 @@ def fetch_winners_data():
                 "colored_multiplier": colored_multiplier,
                 "colored_payout": colored_payout,
                 "volume_hit": winners_data.get("volume_hit"),
+                "signal_hit": winners_data.get("signal_hit"),
+                "volume_delta": winners_data.get('volume_delta')
             })
 
             rendered = []
@@ -4054,7 +4233,7 @@ def fetch_winners_data():
                 colored_ago = (
                     f"{colors['CYN']}⏱ {time_ago(item['timestamp'])}{colors['RES']}"
                     if item["is_current_game"]
-                    else f"{colors['DGRY']}⏱ {item['timestamp']}{colors['RES']}"
+                    else f"{colors['DGRY']}⏱ {item['timestamp'].split(" ")[1]}{colors['RES']}"
                 )
 
                 colored_game = (
@@ -4075,11 +4254,11 @@ def fetch_winners_data():
                     colors['BLCYN'] if item['volume_hit'] >= 50 else
                     colors['BLGRE'] if item['volume_hit'] >= 10 else
                     colors['DGRY']}"
-                    f"{item['volume_hit']:.2f}{colors['RES']}"
+                    f"{item['volume_hit']:.2f}{colors['RES']} {item['signal_hit']} {item['volume_delta']}"
                 )
 
                 colored_vol_hit = (
-                    f"{colors['RES']}| {colors['WHTE']}Vol Hit{colors['RES']}: {colored_api_volume}"
+                    f"{colors['RES']}| 🧪 {colored_api_volume}"
                     if item["is_current_game"]
                     else ""
                 )
@@ -4090,40 +4269,28 @@ def fetch_winners_data():
                     f"{colors['WHTE']}= {item['colored_payout']} "
                     f"{colored_ago} {colored_vol_hit}"
                 )
-
             
             message = "".join(rendered)
 
-            has_red = colors["BLRED"] in message
-            has_yellow = colors["BLYEL"] in message
+            has_red = colors["BLRED"] in colored_game
+            has_yellow = colors["BLYEL"] in colored_game
+            state.multiplier = round(str_to_float(multiplier)) if any([has_red, has_yellow]) else None
 
-            if has_red and has_yellow:
-                if not both_colors_alerted:
-                    both_colors_alerted = True
-                    alert_queue.put("trending")
+            if all([has_red, has_yellow]):
+                if not state.both_colors_alerted:
+                    state.both_colors_alerted = True
+            elif has_red:
+                if not state.red_alerted:
+                    state.red_alerted = True
+            elif has_yellow:
+                if not state.yellow_alerted:
+                    state.yellow_alerted = True
             else:
-                both_colors_alerted = False
+                state.both_colors_alerted = False
+                state.red_alerted = False
+                state.yellow_alerted = False
 
             log_message("info", message, overwrite=True, _overlay_key="winners_data")
-                    
-            # message.append(
-            #     f"\n\t[ {colored_game} ]{colors['WHTE']} - {colored_bet} {colored_multiplier} {colors['WHTE']}= {colored_payout} {colored_ago}"
-            #     f"{f' {colored_vol_hit}'}"
-            # )
-
-            # joined = "".join(message)
-
-            # has_red = colors["BLRED"] in joined
-            # has_yellow = colors["BLYEL"] in joined
-
-            # if has_red and has_yellow:
-            #     if not both_colors_alerted:
-            #         both_colors_alerted = True
-            #         alert_queue.put("trending")
-            # else:
-            #     both_colors_alerted = False
-                        
-            # log_message("info", "".join(message), overwrite=True, _overlay_key="winners_data")
             stop_event.wait(0.5)
         except Exception as e:
             log_message("error", f"[fetch_winners_data] {game_name} {e}", overwrite=True, _overlay_key="winners_data")
@@ -4218,7 +4385,7 @@ def on_key_press(key):
         state.fast_mode = False
         state.scatter_mode = not state.scatter_mode
         spin_in_progress.clear()
-        threading.Thread(target=spin, args=(False, True, False, False,), daemon=False).start()
+        threading.Thread(target=spin, args=(False, True, False, False, False, False,), daemon=False).start()
         status = "ON" if state.scatter_mode else "DISABLED"
         # play_alert(say=f"auto mode {status}")
         # state.scatter_mode = False
@@ -4235,7 +4402,7 @@ def on_key_press(key):
         state.wheel_sleep = int(key.char)
         
     if key == Key.shift_r:
-        threading.Thread(target=spin, args=(False, False, True, False, False,), daemon=False).start()
+        threading.Thread(target=spin, args=(False, False, True, False, False, False,), daemon=False).start()
         
     if key == Key.tab:
         # spammer = [
@@ -4281,9 +4448,10 @@ def on_key_press(key):
         state.scatter_mode = False
         state.quick_spin = True
         state.wheel_mode = False
-        spin_in_progress.clear()
-        threading.Thread(target=spin, args=(False, False, False, False, False, True,), daemon=False).start()
-        alert_queue.put(f"quick spin")
+        # spin_in_progress.clear()
+        # threading.Thread(target=spin, args=(False, False, False, False, False, True,), daemon=False).start()
+        threading.Thread(target=spin, args=(False, False, False, False, False, True,), daemon=True).start() # for manual test
+        # alert_queue.put(f"quick spin")
 
     # MANUAL
     if isinstance(key, KeyCode):
@@ -4605,6 +4773,9 @@ if __name__ == "__main__":
     threads.append(threading.Thread(target=fetch_rtp_data, daemon=True))
     threads.append(threading.Thread(target=fetch_winners_data, daemon=True))
     threads.append(threading.Thread(target=start_listeners, args=(stop_event,), daemon=True))
+
+    threads.append(threading.Thread(target=spin, daemon=True))
+    threading.Thread(target=spin, args=(False, False, True, False, False, False,), daemon=False).start()
     
     for t in threads:
         t.start()
@@ -4624,7 +4795,7 @@ if __name__ == "__main__":
         if backend_proc is not None:
             backend_proc.terminate()
             try:
-                backend_proc.wait(timeout=5)
+                backend_proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 subprocess.run(
                     ["./killall.sh"],
@@ -4645,7 +4816,7 @@ if __name__ == "__main__":
                 if now >= next_run:
                     if state.session_mode == "HOT":
                         spin_in_progress.clear()
-                        threading.Thread(target=spin, args=(False, True, False, False,), daemon=False).start()
+                        threading.Thread(target=spin, args=(False, False, True, False, False, False,), daemon=False).start()
                     next_run = now + random.uniform(5, 9)
                     # alert_queue.put("ping")
             # time.sleep(0.5)

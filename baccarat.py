@@ -1,7 +1,7 @@
 #!/usr/bin/env .venv/bin/python
 
 
-import cv2, os, mss, pyautogui, re, threading, time
+import cv2, hashlib, glob, os, mss, pyautogui, re, redis, threading, time
 import numpy as np
 from collections import Counter, defaultdict
 from wcwidth import wcswidth
@@ -15,18 +15,20 @@ for key, value in os.environ.items():
         colors[key] = value.encode("utf-8").decode("unicode_escape")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL")
-# os.environ["OPENCV_LOG_LEVEL"] = "OFF"
-print("OpenCV log level:", os.getenv("OPENCV_LOG_LEVEL"))
-VALID = {"B", "P", "T", "S", "X"}
+REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+
+VALID = {"P", "B", "T", "S", "X"}
 ROWS = 6
 COLS = 64
 CELL_WIDTH = 3
 VISIBLE_COLS = 20
 ANSI_RE = re.compile(r'\x1b\[[0-9;]*m')
-MAIN_RESULTS = {"B","P","T"}
+MAIN_RESULTS = {"P", "B", "T"}
 SIDE_RESULTS = {"S","X"}
 ROIS = {
-    "bigroad": (240, 690, 360, 90),
+    "bigroad": (217, 695, 370, 88),
     "player1": (730, 695, 25, 35),
     "player2": (755, 695, 25, 35),
     "player3": (690, 700, 35, 25),
@@ -35,9 +37,80 @@ ROIS = {
     "banker3": (975, 700, 35, 25)
 }
 
-# ============================================================
-# CLEAN INPUT
-# ============================================================
+TRAINING_HISTORIES = []
+
+# def save_bigroad_dataset(bigroad_img, history):
+#     """
+#     Save both the image and extracted history.
+#     Duplicate boards are ignored.
+#     """
+#     if not history: return
+
+#     # Use history as fingerprint
+#     fingerprint = hashlib.md5(history.encode()).hexdigest()
+
+#     if r.exists(f"dataset:{fingerprint}"): return
+
+#     timestamp = int(time.time() * 1000)
+
+#     image_file = f"templates/screenshots/{timestamp}.png"
+#     text_file = f"templates/screenshots/{timestamp}.txt"
+
+#     cv2.imwrite(image_file, bigroad_img)
+
+#     with open(text_file, "w") as f:
+#         f.write(history)
+
+#     r.set(f"dataset:{fingerprint}", 1)
+
+#     print(f"[DATASET] Saved {image_file}")
+
+def load_bigroad_data(folder):
+    """
+    Load every Big Road image/text into memory.
+
+    Returns:
+        list[str]
+    """
+    histories = []
+
+    files = sorted(
+        glob.glob(os.path.join(folder, "*.png")) +
+        glob.glob(os.path.join(folder, "*.txt"))
+    )
+
+    print(f"Loading {len(files)} Big Road files...")
+
+    for file in files:
+        if file.endswith(".png"):
+            history, _ = history_from_image(file)
+        else:
+            with open(file) as f:
+                history = f.read()
+
+        history = clean_prediction_history(history)
+
+        if not history: continue
+
+        histories.append(history)
+
+        print(
+            f"{os.path.basename(file):30} "
+            f"{len(history):4} hands"
+        )
+
+    print(f"Loaded {len(histories)} histories.\n")
+
+    return histories
+
+# def load_all_histories():
+#     permanent = load_bigroad_data(
+#         "templates/bigroad",
+#         "trained"
+#     )
+
+#     return permanent
+
 def clean_history(history):
     history = history.upper()
     return "".join(c for c in history if c in VALID)
@@ -45,24 +118,93 @@ def clean_history(history):
 def clean_prediction_history(history):
     return "".join(
         x for x in history
-        if x in MAIN_RESULTS
+        if x in "MAIN_RESULTS"
     )
 
-def history_from_image(filename):
-    img = cv2.imread(filename)
+def nearest_pattern_prediction(current_history, max_order=20):
+    """
+    Search every loaded history for the longest matching suffix.
+    """
+    current_history = clean_prediction_history(current_history)
+    score = Counter()
 
-    if img is None:
-        raise FileNotFoundError(filename)
+    if not current_history: return score
+
+    for history in TRAINING_HISTORIES:
+        longest = min(
+            max_order,
+            len(current_history),
+            len(history) - 1
+        )
+
+        for order in range(longest, 0, -1):
+            pattern = current_history[-order:]
+            start = 0
+
+            while True:
+                pos = history.find(pattern, start)
+
+                if pos == -1: break
+
+                next_pos = pos + order
+
+                if next_pos < len(history): score[history[next_pos]] += 1
+
+                start = pos + 1
+
+            if sum(score.values()): break
+
+    return score
+
+def train_history(history, max_order=10):
+    history = clean_prediction_history(history)
+
+    for order in range(1, max_order + 1):
+        if len(history) <= order:
+            break
+
+        for i in range(len(history) - order):
+            pattern = history[i:i+order]
+            nxt = history[i+order]
+
+            r.hincrby(
+                f"pattern:{pattern}",
+                nxt,
+                1
+            )
+
+def train_latest_transition(old_history, new_history):
+    if len(new_history) <= len(old_history): return
+
+    for order in range(1, 11):
+        if len(new_history) <= order: break
+
+        pattern = new_history[-order-1:-1]
+        nxt = new_history[-1]
+
+        if len(pattern) != order: continue
+
+        r.hincrby(
+            f"pattern:{pattern}",
+            nxt,
+            1
+        )
+
+def history_from_image(source):
+    if isinstance(source, str): img = cv2.imread(source)
+    else: img = source.copy()
+
+    if img is None: return "", []
 
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
 
     hsv_colors = {
+        "P": [
+            (np.array([95,100,100]), np.array([135,255,255]))
+        ],
         "B": [
             (np.array([0,120,120]), np.array([10,255,255])),
             (np.array([170,120,120]), np.array([180,255,255]))
-        ],
-        "P": [
-            (np.array([95,100,100]), np.array([135,255,255]))
         ],
         "T": [
             (np.array([40,80,80]), np.array([90,255,255]))
@@ -76,7 +218,7 @@ def history_from_image(filename):
 
         for lo, hi in ranges:
             m = cv2.inRange(hsv, lo, hi)
-            mask = m if mask is None else mask | m
+            mask = m if mask is None else (mask | m)
 
         cnts, _ = cv2.findContours(
             mask,
@@ -85,23 +227,68 @@ def history_from_image(filename):
         )
 
         for c in cnts:
-            area = cv2.contourArea(c)
+            if cv2.contourArea(c) < 50: continue
 
-            if area < 50:
-                continue
+            (x, y), _ = cv2.minEnclosingCircle(c)
 
-            (x, y), r = cv2.minEnclosingCircle(c)
+            circles.append({
+                "x": int(x),
+                "y": int(y),
+                "symbol": symbol
+            })
 
-            circles.append(
-                (int(x), int(y), symbol)
-            )
+    # ---------- HISTORY FOR REDIS ----------
+    ordered = sorted(
+        circles,
+        key=lambda c: (c["x"], c["y"])
+    )
 
-    # Sort by Big Road order
-    circles.sort(key=lambda c: (c[0], c[1]))
+    history = "".join(c["symbol"] for c in ordered)
 
-    history = "".join(symbol for _, _, symbol in circles)
+    return history, circles
 
-    return history
+def history_from_circles(circles):
+    """
+    Convert detected Big Road circles into a history string.
+
+    Returns:
+        BBBPPPTBB...
+    """
+
+    if not circles: return ""
+
+    # Unique X/Y positions
+    xs = sorted(set(c["x"] for c in circles))
+    ys = sorted(set(c["y"] for c in circles))
+
+    xmap = {x: i for i, x in enumerate(xs)}
+    ymap = {y: i for i, y in enumerate(ys)}
+
+    rows = len(ys)
+    cols = len(xs)
+
+    # Build temporary grid
+    grid = [[None for _ in range(cols)] for _ in range(rows)]
+
+    for circle in circles:
+        row = ymap[circle["y"]]
+        col = xmap[circle["x"]]
+
+        if row < rows and col < cols:
+            grid[row][col] = circle["symbol"]
+
+    # Reconstruct history
+    history = []
+
+    for col in range(cols):
+        for row in range(rows):
+            symbol = grid[row][col]
+
+            if symbol is None: continue
+
+            history.append(symbol)
+
+    return "".join(history)
 
 # PADDING
 def pad(text, width):
@@ -109,59 +296,71 @@ def pad(text, width):
     visible = wcswidth(clean)
     return text + " " * max(0, width-visible)
 
-#TREND CHECK
 # ============================================================
 # TREND
 # ============================================================
+def redis_pattern_prediction(history):
+    history = clean_prediction_history(history)
+    counter = Counter()
+    for order in range(
+        min(10, len(history)),
+        0,
+        -1
+    ):
 
-def trend_prediction(history):
-    score = Counter()
+        pattern = history[-order:]
+        values = r.hgetall(
+            f"pattern:{pattern}"
+        )
 
-    results = [
-        x for x in history
-        if x in ("B","P","T")
-    ]
+        if values:
+            for k, v in values.items(): counter[k] += int(v)
+            break
 
-    if len(results) < 2:
-        return score
+    return counter
 
+# def trend_prediction(history):
+#     score = Counter()
+#     results = [
+#         x for x in history
+#         if x in ("P","B","T")
+#     ]
 
-    last = results[-1]
+#     if len(results) < 2: return score
 
-    # count current streak
-    streak = 1
-    i = len(results)-2
+#     last = results[-1]
 
-    while i >= 0 and results[i] == last:
-        streak += 1
-        i -= 1
+#     # count current streak
+#     streak = 1
+#     i = len(results) - 2
 
-
-    if last == "T":
-        score["T"] += 35
-        score["B"] += 32
-        score["P"] += 33
-
-    else:
-        other = "P" if last == "B" else "B"
-
-        if streak == 1:
-            score[last] += 50
-            score[other] += 30
-            score["T"] += 20
-
-        elif streak == 2:
-            score[last] += 45
-            score[other] += 30
-            score["T"] += 25
-
-        elif streak >= 3:
-            score[last] += 35
-            score[other] += 35
-            score["T"] += 30
+#     while i >= 0 and results[i] == last:
+#         streak += 1
+#         i -= 1
 
 
-    return score
+#     if last == "T":
+#         score["T"] += 35
+#         score["B"] += 32
+#         score["P"] += 33
+
+#     else:
+#         other = "P" if last == "B" else "B"
+
+#         if streak == 1:
+#             score[last] += 50
+#             score[other] += 30
+#             score["T"] += 20
+#         elif streak == 2:
+#             score[last] += 45
+#             score[other] += 30
+#             score["T"] += 25
+#         elif streak >= 3:
+#             score[last] += 35
+#             score[other] += 35
+#             score["T"] += 30
+
+#     return score
 
 # ============================================================
 # PATTERN SEARCH
@@ -169,13 +368,14 @@ def trend_prediction(history):
 
 def pattern_prediction(history, window=7):
     if len(history) <= window: return Counter()
-
-    pattern = history[-window:]
+    
+    pattern = redis_pattern_prediction(history)
     counter = Counter()
 
     for i in range(len(history) - window):
         if history[i:i+window] == pattern:
-            counter[history[i+window]] += 1
+            # counter[history[i+window]] += 1
+            pattern = history[-window:]
 
     return counter
 
@@ -187,32 +387,17 @@ def tie_prediction(history):
     if len(history) < 20: return score
 
     rate = ties / len(history)
-
     # normal tie rate
-    if rate < 0.05:
-        score["T"] += 5
-
-    elif rate < 0.10:
-        score["T"] += 15
-
-    else:
-        score["T"] += 25
-
-
+    if rate < 0.05: score["T"] += 5
+    elif rate < 0.10: score["T"] += 15
+    else: score["T"] += 25
     # last tie distance
-
     last_tie = history.rfind("T")
 
     if last_tie != -1:
-
         gap = len(history)-last_tie-1
-
-        if gap >= 15:
-            score["T"] += 10
-
-        elif gap >= 8:
-            score["T"] += 5
-
+        if gap >= 15: score["T"] += 10
+        elif gap >= 8: score["T"] += 5
 
     return score
 
@@ -270,67 +455,66 @@ def combine(pattern, markov, frequency, trend):
     # baseline baccarat tie probability
     score["T"] += 8
     # recent tie clustering
-    if frequency["T"] >= 5:
-        score["T"] += 15
-
-    elif frequency["T"] >= 3:
-        score["T"] += 8
+    if frequency["T"] >= 5: score["T"] += 15
+    elif frequency["T"] >= 3: score["T"] += 8
 
     return score
 
-def make_prediction(history):
-    history = clean_prediction_history(history)
-    pattern = pattern_prediction(history)
+# def make_prediction(history):
+#     history = clean_prediction_history(history)
+#     pattern = pattern_prediction(history)
 
-    markov = Counter()
+#     markov = Counter()
 
-    for order in (3,2,1):
-        markov = markov_prediction(
-            history,
-            order
-        )
+#     for order in (3,2,1):
+#         markov = markov_prediction(
+#             history,
+#             order
+#         )
 
-        if markov: break
+#         if markov: break
 
-    freq = frequency_prediction(history)
-    trend = trend_prediction(history)
-    tie = tie_prediction(history)
+#     freq = frequency_prediction(history)
+#     trend = trend_prediction(history)
+#     tie = tie_prediction(history)
 
-    score = combine(
-        pattern,
-        markov,
-        freq,
-        trend
-    )
+#     score = combine(
+#         pattern,
+#         markov,
+#         freq,
+#         trend
+#     )
 
-    for k,v in tie.items(): score[k] += v * 0.5
+#     for k,v in tie.items(): score[k] += v * 0.5
 
-    return score
+#     return score
 
 # ============================================================
 # PRINT PREDICTION
 # ============================================================
-def print_prediction(history, score, bar_length: int = 10):
+def print_prediction(history, score, data_src, bar_length: int = 10):
     history = clean_prediction_history(history)
     total = sum(score.values())
     counts = Counter(history)
 
     if total == 0: total = 1
 
-    print("\nPrediction")
-    print("-" * 40)
+    title = f"{colors['LYEL']}{data_src.upper()}" if data_src == 'historical' else f"{colors['LMAG']}{data_src.upper()}"
+    
+    print(f"\n{title} {colors['ORA']}PREDICTIONS{colors['CYN']}")
+    print("-" * 20)
 
     names = {
-        "B": f"{colors['RED']}BANKER{colors['RES']}",
         "P": f"{colors['BLU']}PLAYER{colors['RES']}",
+        "B": f"{colors['RED']}BANKER{colors['RES']}",
         "T": f"{colors['GRE']}Tie{colors['RES']}",
         "S": f"{colors['ORA']}Small Tiger{colors['RES']}",
         "X": f"{colors['MAG']}Big Tiger{colors['RES']}"
     }
 
     blocks = {
-        "B": "🟥",
         "P": "🟦",
+        "B": "🟥",
         "T": "🟩",
         "S": "🟧",
         "X": "🟪"
@@ -338,7 +522,7 @@ def print_prediction(history, score, bar_length: int = 10):
 
     ranking = []
 
-    for k in ["B", "P", "T"]:
+    for k in ["P", "B", "T"]:
         score[k] = max(score[k],0)
         percentage = score[k] / total * 100
 
@@ -368,7 +552,8 @@ def print_prediction(history, score, bar_length: int = 10):
     if len(sorted_rank) >= 2: confidence = sorted_rank[0][0]-sorted_rank[1][0]
 
     print(
-        f"\nTotal Hands :\t{colors['LYEL']}{counts['B'] + counts['P'] + counts['T']}{colors['WHTE']}"
+        f"\nTotal Hands :\t{colors['LYEL']}{sum(counts.values())}{colors['WHTE']}"
+        # f"\nTotal Hands :\t{colors['LYEL']}{total}{colors['WHTE']}"
         f"\nConfidence :\t{colors['ORA']}{confidence:.2f} {colors['WHTE']}%"
     )
 
@@ -425,15 +610,48 @@ class Vision:
     def __init__(self, state):
         self.state = state
         self.sct = mss.MSS()
+        self.initialized = False
         self.previous = {}
         self.cards = {}
         self.last_card_time = {}
         self.history = ""
-        self.hand_locked = False
+        # self.hand_locked = False
         self.empty_frames = 0
         self.lock = threading.Lock()
 
-        os.makedirs("cards", exist_ok=True)
+        self.templates = {}
+
+        for rank in (
+            "A","2","3","4","5",
+            "6","7","8","9","T"
+        ):
+
+            img = cv2.imread(
+                f"templates/cards/{rank}.png",
+                0
+            )
+
+            if img is None:
+                continue
+
+            img = cv2.threshold(
+                img,
+                150,
+                255,
+                cv2.THRESH_BINARY
+            )[1]
+
+            img = cv2.resize(
+                img,
+                (35,35)
+            )
+
+            self.templates[rank] = [
+                img,
+                cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE),
+                cv2.rotate(img, cv2.ROTATE_180),
+                cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE),
+            ]
 
         # Change these later
         self.monitor = {
@@ -475,7 +693,6 @@ class Vision:
             if c
         ) % 10
 
-
         return (
             player_total in (8,9)
             or
@@ -503,7 +720,6 @@ class Vision:
             self.cards.get("banker2"),
             self.cards.get("banker3")
         ]
-
 
         player_total = sum(
             self.baccarat_value(x)
@@ -544,12 +760,31 @@ class Vision:
             if banker_total in rules and rules[banker_total](): return False
             
         return True
-
+    
     def run(self):
         while not self.state.stop_event.is_set():
             frame = self.capture()
+            bigroad = self.crop(frame, ROIS["bigroad"])
+            history, _ = history_from_image(bigroad)
+            # ----------------------------------
+            # Initial Big Road import
+            # ----------------------------------
+            if not self.initialized:
+                if history != self.history:
+                    cv2.imwrite(
+                        "templates/screenshots/bigroad.png",
+                        bigroad
+                    )
+
+                self.state.add_result(history)
+                self.history = history
+                # Train only once during startup
+                train_history(history)
+                self.initialized = True
+                print(f"Initial history: {history}")
+
             x, y = pyautogui.position()
-            # print(f"\r{x}, {y}", end="", flush=True)
+            print(f"\r{x}, {y}", end="", flush=True)
 
             cv2.putText(
                 frame,
@@ -564,42 +799,54 @@ class Vision:
             self.draw_rois(frame)
 
             for name, roi in ROIS.items():
-                if name == "bigroad": continue
+                if name == "bigroad": continue 
+
                 card = self.crop(frame, roi)
-                
+
                 if not self.has_card(card): continue
+
                 if self.is_new_card(name, card):
                     now = time.time()
-                    last = self.last_card_time.get(name,0)
+                    last = self.last_card_time.get(name, 0)
 
-                    if (now - last < 1): continue
+                    if now - last < 1: continue
 
-                    self.last_card_time[name]=now
-                    # print(f"New card de1                                                                                                                                                                                                                                                                      1qtected: {name}")
-                    
+                    self.last_card_time[name] = now
                     corner = self.card_corner(card)
+
                     self.save_corner(corner)
+
                     rank = self.detect_rank(corner)
 
                     with self.lock: self.cards[name] = rank
 
-                    # print(name, rank)
+                    # bigroad = self.crop(frame, ROIS["bigroad"])
+                    # history, _ = history_from_image(bigroad)
 
-            if not self.hand_locked:
-                if self.hand_finished():
-                    winner = self.evaluate_hand(self.cards.copy())
-                    if winner:
-                        self.state.add_result(winner)
-                        self.hand_locked=True
+                if history != self.history:
+                    if history.startswith(self.history):
+                        new_results = history[len(self.history):]
 
-                    # print("Winner:", winner)
-                    
+                        for winner in new_results: self.state.add_result(winner)
+                        # Learn ONLY the newly appended transition.
+                        # The initial history was already trained during startup.
+                        train_latest_transition(
+                            self.history,
+                            history
+                        )
+                    else:
+                        print("[SYNC] Big Road resynchronized.")
+                        # History changed unexpectedly (shoe reset/manual correction).
+                        # Retrain only if this exact history has never been imported.
+                        fingerprint = hashlib.md5(history.encode()).hexdigest()
+
+                        if not r.exists(f"trained:{fingerprint}"):
+                            train_history(history)
+                            r.set(f"trained:{fingerprint}", 1)
+
+                    self.history = history
+
             if self.new_hand_detected(frame): self.reset_hand()
-
-            # cv2.imshow(
-            #     "debug_frame.png",
-            #     frame
-            # )
 
             if cv2.waitKey(1) == ord("q"):
                 self.state.stop()
@@ -610,7 +857,6 @@ class Vision:
 
     def draw_rois(self, frame):
         for name, (x, y, w, h) in ROIS.items():
-
             cv2.rectangle(
                 frame,
                 (x, y),
@@ -698,7 +944,7 @@ class Vision:
         return card[0:16, 0:35]
 
     def save_corner(self, corner):
-        filename = f"cards/{int(time.time()*1000)}.png"
+        filename = f"templates/screenshots/{int(time.time()*1000)}.png"
         # print("Saving: ", filename)
 
         cv2.imwrite(filename, corner)
@@ -730,38 +976,7 @@ class Vision:
         best = None
         best_score = 0
 
-        for rank in [
-            "A","2","3","4","5",
-            "6","7","8","9","T"
-        ]:
-
-            template = cv2.imread(
-                f"templates/{rank}.png",
-                0
-            )
-
-            if template is None:
-                continue
-
-            template = cv2.threshold(
-                template,
-                150,
-                255,
-                cv2.THRESH_BINARY
-            )[1]
-
-            template = cv2.resize(
-                template,
-                (35,35)
-            )
-
-            rotations = [
-                template,
-                cv2.rotate(template, cv2.ROTATE_90_CLOCKWISE),
-                cv2.rotate(template, cv2.ROTATE_180),
-                cv2.rotate(template, cv2.ROTATE_90_COUNTERCLOCKWISE),
-            ]
-
+        for rank, rotations in self.templates.items():
             for rotated in rotations:
 
                 result = cv2.matchTemplate(
@@ -776,54 +991,6 @@ class Vision:
                     best_score = score
                     best = rank
 
-        # for rank in [
-        #     "A",
-        #     "2",
-        #     "3",
-        #     "4",
-        #     "5",
-        #     "6",
-        #     "7",
-        #     "8",
-        #     "9",
-        #     "T"
-        # ]:
-
-        #     template = cv2.imread(
-        #         f"templates/{rank}.png",
-        #         0
-        #     )
-
-        #     if template is None: continue
-
-        #     template = cv2.threshold(
-        #         template,
-        #         150,
-        #         255,
-        #         cv2.THRESH_BINARY
-        #     )[1]
-
-        #     template = cv2.resize(
-        #         template,
-        #         (35,35)
-        #     )
-
-        #     result = cv2.matchTemplate(
-        #         gray,
-        #         template,
-        #         cv2.TM_CCOEFF_NORMED
-        #     )
-
-        #     score = result.max()
-
-        #     if score > best_score:
-        #         best_score = score
-        #         best = rank
-
-        if best_score < 0.65:
-            print(f"[MATCH] No match ({best_score:.3f})")
-            return "?"
-
         print(f"[MATCH] {best} ({best_score:.3f})")
         return best
 
@@ -837,58 +1004,52 @@ class Vision:
         except ValueError:
             return 0
 
-    def evaluate_hand(self, cards):
-        player = [
-            cards.get("player1"),
-            cards.get("player2"),
-            cards.get("player3")
-        ]
+    # def evaluate_hand(self, cards):
+    #     player = [
+    #         cards.get("player1"),
+    #         cards.get("player2"),
+    #         cards.get("player3")
+    #     ]
 
-        banker = [
-            cards.get("banker1"),
-            cards.get("banker2"),
-            cards.get("banker3")
-        ]
+    #     banker = [
+    #         cards.get("banker1"),
+    #         cards.get("banker2"),
+    #         cards.get("banker3")
+    #     ]
 
-        # wait until all required cards are known
-        all_cards = player[:2] + banker[:2]
+    #     # wait until all required cards are known
+    #     all_cards = player[:2] + banker[:2]
 
-        if any(
-            c is None or c == "?"
-            for c in all_cards
-        ):
-            return None
+    #     if any(
+    #         c is None or c == "?"
+    #         for c in all_cards
+    #     ):
+    #         return None
 
+    #     player_total = sum(
+    #         self.baccarat_value(c)
+    #         for c in player
+    #         if c not in (None, "?")
+    #     ) % 10
 
-        player_total = sum(
-            self.baccarat_value(c)
-            for c in player
-            if c not in (None, "?")
-        ) % 10
+    #     banker_total = sum(
+    #         self.baccarat_value(c)
+    #         for c in banker
+    #         if c not in (None, "?")
+    #     ) % 10
 
-        banker_total = sum(
-            self.baccarat_value(c)
-            for c in banker
-            if c not in (None, "?")
-        ) % 10
+    #     print(
+    #         f"Player {player} = {player_total}"
+    #     )
 
+    #     print(
+    #         f"Banker {banker} = {banker_total}"
+    #     )
 
-        print(
-            f"Player {player} = {player_total}"
-        )
+    #     if player_total > banker_total: return "P"
+    #     if banker_total > player_total: return "B"
 
-        print(
-            f"Banker {banker} = {banker_total}"
-        )
-
-
-        if player_total > banker_total:
-            return "P"
-
-        if banker_total > player_total:
-            return "B"
-
-        return "T"
+    #     return "T"
     
     def new_hand_detected(self,frame):
         empty=0
@@ -901,11 +1062,11 @@ class Vision:
         else: self.empty_frames = 0
 
         return self.empty_frames > 15
-
+    
     def reset_hand(self):
         self.cards = {}
         self.previous = {}
-        self.hand_locked = False
+        # self.hand_locked = False
 
 class BigRoad:
     def __init__(self, rows=ROWS, cols=COLS):
@@ -969,9 +1130,7 @@ class BigRoad:
 
         # find free column
         while self.col < self.cols:
-
-            if self.grid[0][self.col] is None:
-                break
+            if self.grid[0][self.col] is None: break
 
             self.col += 1
 
@@ -1019,8 +1178,7 @@ class BigRoad:
         self.max_col -= 1
 
     def validate(self):
-        for cell in self.cells:
-            assert self.grid[cell.row][cell.col] is cell
+        for cell in self.cells: assert self.grid[cell.row][cell.col] is cell
 
     def debug(self):
         print("\nMove Winner Row Col Tie")
@@ -1081,7 +1239,64 @@ def render_cell(cell):
 
     return text
 
-def draw_big_road(results):
+def draw_detected_board(circles):
+    print()
+    print("=" * 65)
+    print(" DETECTED BIG ROAD")
+    print("=" * 65)
+
+    # Build empty board
+    grid = [[None for _ in range(COLS)] for _ in range(ROWS)]
+
+    if circles:
+        xs = sorted(set(c["x"] for c in circles))
+        ys = sorted(set(c["y"] for c in circles))
+
+        xmap = {x: i for i, x in enumerate(xs)}
+        ymap = {y: i for i, y in enumerate(ys)}
+
+        for c in circles:
+            row = ymap[c["y"]]
+            col = xmap[c["x"]]
+            
+            if row < ROWS and col < COLS:
+                grid[row][col] = c["symbol"]
+
+    # Determine last visible columns (same as draw_big_road)
+    max_col = 0
+    
+    if circles: max_col = min(len(xs) - 1, COLS - 1)
+
+    start_col = max(0, max_col - VISIBLE_COLS + 1)
+    end_col = max_col + 1
+
+    if start_col > 0:
+        print(f"{colors['YEL']}... showing last {VISIBLE_COLS} columns{colors['RES']}")
+
+    # Column numbers
+    print("\n    ", end="")
+    for c in range(start_col, end_col):
+        print(f"{colors['CYN']}{c + 1:^{CELL_WIDTH}}", end="")
+    print()
+
+    symbol_map = {
+        "P": f"{colors['LBLU']}⬤{colors['RES']}",
+        "B": f"{colors['LRED']}⬤{colors['RES']}",
+        "T": f"{colors['BLGRE']}⬤{colors['RES']}",
+    }
+
+    # Draw rows (same formatting)
+    for r in range(ROWS):
+        line = f"{colors['CYN']}{r + 1} {colors['YEL']}| {colors['RES']}"
+
+        for c in range(start_col, end_col):
+            symbol = grid[r][c]
+            cell = symbol_map.get(symbol, " ")
+            line += pad(cell, CELL_WIDTH)
+
+        print(line)
+
+def draw_bigroad(results):
     road = BigRoad(
         ROWS,
         COLS
@@ -1098,8 +1313,7 @@ def draw_big_road(results):
     print(" BIG ROAD")
     print("=" * 65)
 
-    if LOG_LEVEL == "DEBUG":
-        road.debug()
+    if LOG_LEVEL == "DEBUG": road.debug()
 
     # -----------------------------------
     # Show only the last VISIBLE_COLS
@@ -1134,69 +1348,63 @@ def draw_big_road(results):
 # ============================================================
 # MAIN
 # ============================================================
-def main(state):
-    print("=" * 40)
-    print(" Baccarat AI Predictor")
-    print("=" * 40)
-
-    history = input(
-        "\nHistory ('I' = load image): "
-    ).strip()
-    
-    if history.upper() == "I":
-        image = input("\nImage path : ").strip()
-
-        if not os.path.exists(image):
-            print("File not found")
-            return
-
-        detected = history_from_image(image)
-
-        print("\nDetected History")
-        print(detected)
-
-        state.add_result(detected)
-
-    else:
-        state.add_result(
-            clean_history(history)
-        )
-
-    while True:
-        results = state.get_results()
-
-        history = "".join(
-            x for x in results
-            if x in MAIN_RESULTS
-        )
-
-        score = make_prediction(history)
-
-        os.system("cls" if os.name == "nt" else "clear")
-
-        print("="*40)
-        print(" Baccarat AI Predictor")
-        print("="*40)
-
-        print("\nHistory")
-        print(history)
-        print(f"Length : {len(history)}")
-
-        draw_big_road(results)
-        print_prediction(history, score)
-
-        nxt = input("\nNext (B/P/T/S/X/Q): ").strip().upper()
-
-        if nxt == "Q": break
-        elif all(x in VALID for x in nxt): state.add_result(nxt)
-        else:
-            print("Invalid input")
-            input("Press Enter...")
-
-
 if __name__ == "__main__":
+    r = redis.Redis(
+        host=REDIS_HOST,
+        port=REDIS_PORT,
+        password=REDIS_PASSWORD,
+        decode_responses=True
+    )
+
+    try:
+        r.ping()
+        print("info", f"✅ Connected to Redis")
+    except redis.exceptions.ConnectionError as e:
+        print("error", f"🤖❌ Redis connection failed  {e}")
+        raise SystemExit(1)
+
+    try:
+        folder = "templates/screenshots"
+
+        for filename in os.listdir(folder):
+            file_path = os.path.join(folder, filename)
+
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    except FileNotFoundError:
+        print(f"Folder not found: {folder}")
+
+    except PermissionError:
+        print(f"Permission denied: {folder}")
+    
     state = GameState()
     vision = Vision(state)
+    # frame = vision.capture()
+    # bigroad = vision.crop(
+    #     frame,
+    #     ROIS["bigroad"]
+    # )
+
+    # cv2.imwrite("debug_bigroad.png", bigroad)
+
+    # history, circles = history_from_image(bigroad)
+    # print(f"Initial history: {history}")
+    # state.add_result(history)
+    # draw_detected_board(circles)
+
+    # IMPORT_VERSION = 1
+    TRAINING_HISTORIES = load_bigroad_data("templates/bigroad")
+
+    # if r.get("bigroad_version") != str(IMPORT_VERSION):
+    #     load_bigroad_data(
+    #         "templates/bigroad",
+    #         "trained"
+    #     )
+
+    #     r.set(
+    #         "bigroad_version",
+    #         IMPORT_VERSION
+    #     )
 
     vision_thread = threading.Thread(
         target = vision.run,
@@ -1206,12 +1414,40 @@ if __name__ == "__main__":
     vision_thread.start()
 
     try:
-        main(state)
-    finally:
-        print("Stopping...")
+        while True:
+            history = "".join(state.get_results())
 
+            if history:
+                os.system("cls" if os.name == "nt" else "clear")
+
+                # circles = history_from_image(vision.crop(vision.capture(),ROIS["bigroad"]))[1]
+                # history_from_circles(circles)
+
+                # draw_detected_board(history_from_image(vision.crop(vision.capture(),ROIS["bigroad"]))[1])
+
+                draw_detected_board(history_from_image(
+                    vision.crop(
+                        vision.capture(),
+                        ROIS["bigroad"]
+                    )
+                )[1])
+                
+                redis_score = redis_pattern_prediction(history)
+                nearest_score = nearest_pattern_prediction(history)
+
+                # score = Counter()
+
+                # score.update(redis_score)
+                # score.update(nearest_score)
+
+                # print_prediction(history, score, 'combined')
+
+                print_prediction(history, redis_score, 'historical')
+                print_prediction(history, nearest_score, 'game')
+
+            time.sleep(0.5)
+    except KeyboardInterrupt:
         state.stop()
+    finally:
         vision_thread.join(timeout=3)
-
-        print("Exited cleanly")
-        
+        print("Exited")
